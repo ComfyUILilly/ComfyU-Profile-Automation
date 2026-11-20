@@ -31,6 +31,14 @@ def _mode(value, rng):
     return str(value)
 
 
+def _span(generation, modern_key, legacy_key, default, rng):
+    if modern_key in generation:
+        return _count(generation[modern_key], rng)
+    if legacy_key in generation:
+        return _count(generation[legacy_key], rng) + 1
+    return default
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="ComfyUI profile automation")
     parser.add_argument("--config", default="config.yml")
@@ -81,28 +89,60 @@ def main() -> int:
 
             profile_cfg = config["profiles"][profile_name]
             gen = config["generation"]
+            checkpoint = character = None
+            loras = []
+            checkpoint_remaining = character_remaining = lora_remaining = 0
+            checkpoint_mode = character_mode = lora_mode = "Weight"
             for index in range(batch_count):
-                checkpoint_mode = _mode(profile_cfg.get("checkpoint_kind", gen.get("checkpoint_kind", "Weight")), rng)
-                character_mode = _mode(profile_cfg.get("character_kind", gen.get("character_kind", "Weight")), rng)
-                lora_mode = _mode(profile_cfg.get("lora_kind", gen.get("lora_kind", "Weight")), rng)
                 imported = None
-                if checkpoint_mode == "fromImg":
+                if checkpoint is None or checkpoint_remaining <= 0:
+                    checkpoint_mode = _mode(profile_cfg.get("checkpoint_kind", gen.get("checkpoint_kind", "Weight")), rng)
+                    if checkpoint_mode == "fromImg":
+                        image_dir = Path(profile_cfg.get("from_img_path", gen.get("from_img_path", "")))
+                        if not image_dir.is_absolute():
+                            image_dir = Path(config.get("base_dir", ".")) / image_dir
+                        imported = from_image.load(profile, image_dir)
+                    if imported:
+                        prompt, checkpoint, character, loras = imported
+                        workflow = builder.prepare_from_image(profile, prompt, checkpoint, character, loras)
+                        checkpoint_remaining = character_remaining = lora_remaining = 1
+                    else:
+                        if checkpoint_mode == "fromImg":
+                            log.warning("No compatible PNG workflow for %s; falling back to Weight", profile_name)
+                            checkpoint_mode = "Weight"
+                        checkpoint = selector.choose(profile, "checkpoint", checkpoint_mode)[0]
+                        checkpoint_remaining = _span(gen, "images_per_checkpoint", "CheckpointLoop", 1, rng)
+                        character = None
+                        character_remaining = 0
+                        loras = []
+                        lora_remaining = 0
+                elif checkpoint_mode == "fromImg":
                     image_dir = Path(profile_cfg.get("from_img_path", gen.get("from_img_path", "")))
                     if not image_dir.is_absolute():
                         image_dir = Path(config.get("base_dir", ".")) / image_dir
                     imported = from_image.load(profile, image_dir)
-                if imported:
-                    prompt, checkpoint, character, loras = imported
-                    workflow = builder.prepare_from_image(profile, prompt, checkpoint, character, loras)
-                else:
-                    if checkpoint_mode == "fromImg":
-                        log.warning("No compatible PNG workflow for %s; falling back to Weight", profile_name)
+                    if imported:
+                        prompt, checkpoint, character, loras = imported
+                        workflow = builder.prepare_from_image(profile, prompt, checkpoint, character, loras)
+                        checkpoint_remaining = character_remaining = lora_remaining = 1
+                    else:
                         checkpoint_mode = "Weight"
-                    checkpoint = selector.choose(profile, "checkpoint", checkpoint_mode)[0]
-                    character = None if character_mode == "Wildcard" else (
-                        selector.choose(profile, "character", character_mode)[0] if profile.characters else None)
-                    lora_count = _count(gen.get("lora_count", [1, 2]), rng)
-                    loras = selector.choose(profile, "lora", lora_mode, lora_count)
+                        checkpoint = selector.choose(profile, "checkpoint", checkpoint_mode)[0]
+                        checkpoint_remaining = 1
+
+                if imported is None:
+                    if character is None or character_remaining <= 0:
+                        character_mode = _mode(profile_cfg.get("character_kind", gen.get("character_kind", "Weight")), rng)
+                        character = None if character_mode == "Wildcard" else (
+                            selector.choose(profile, "character", character_mode)[0] if profile.characters else None)
+                        character_remaining = _span(gen, "images_per_character", "CharLoop", 1, rng)
+                        loras = []
+                        lora_remaining = 0
+                    if lora_remaining <= 0:
+                        lora_mode = _mode(profile_cfg.get("lora_kind", gen.get("lora_kind", "Weight")), rng)
+                        lora_count = _count(gen.get("lora_count", [1, 2]), rng)
+                        loras = selector.choose(profile, "lora", lora_mode, lora_count)
+                        lora_remaining = _span(gen, "images_per_lora", "queueLoop", 1, rng)
                     workflow = builder.build(profile, checkpoint, character, loras,
                                              weight_metadata=selector.last_group_metadata)
 
@@ -110,6 +150,9 @@ def main() -> int:
                          profile_name, index + 1, batch_count, checkpoint.relative_path,
                          character.relative_path if character else "-",
                          [item.relative_path for item in loras])
+                checkpoint_remaining -= 1
+                character_remaining -= 1
+                lora_remaining -= 1
                 if args.dry_run:
                     continue
                 client.queue_prompt(workflow)
