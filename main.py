@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import logging
 import random
 import time
@@ -23,6 +24,14 @@ def _count(value, rng):
     return max(1, int(value))
 
 
+def _mode(value, rng):
+    if isinstance(value, dict):
+        names = list(value)
+        weights = [max(0.0, float(value[name])) for name in names]
+        return rng.choices(names, weights=weights if any(weights) else None, k=1)[0]
+    return str(value)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="ComfyUI profile automation")
     parser.add_argument("--config", default="config.yml")
@@ -39,7 +48,7 @@ def main() -> int:
     manager = ProfileManager(config["profiles"], rng=rng)
     catalog = ProfileCatalog(data_path, config["profiles"], base_dir=Path(config.get("base_dir", ".")).resolve())
     databases = {name: UsageDatabase(data_path / name / "database") for name in config["profiles"]}
-    selector = AssetSelector(rng=rng, database=None)
+    selector = AssetSelector(rng=rng)
     builder = WorkflowBuilder(rng=rng)
     from_image = FromImageWorkflow(rng=rng)
     client = ComfyUIClient(**config["comfyui"], timeout=config["generation"].get("request_timeout", 30))
@@ -73,27 +82,24 @@ def main() -> int:
 
             profile_cfg = config["profiles"][profile_name]
             gen = config["generation"]
-            checkpoint_mode = profile_cfg.get("checkpoint_kind", gen.get("checkpoint_kind", "Weight"))
-            from_img_mode = checkpoint_mode == "fromImg"
-            imported = None
-            if from_img_mode:
-                image_dir = Path(profile_cfg.get("from_img_path", gen.get("from_img_path", "")))
-                if not image_dir.is_absolute():
-                    image_dir = Path(config.get("base_dir", ".")) / image_dir
-                imported = from_image.load(profile, image_dir)
-                if imported is None:
-                    log.warning("No compatible PNG workflow found for profile %s; using regular selection", profile_name)
-                    from_img_mode = False
-
             for index in range(batch_count):
-                if from_img_mode and imported:
+                checkpoint_mode = _mode(profile_cfg.get("checkpoint_kind", gen.get("checkpoint_kind", "Weight")), rng)
+                character_mode = _mode(profile_cfg.get("character_kind", gen.get("character_kind", "Weight")), rng)
+                lora_mode = _mode(profile_cfg.get("lora_kind", gen.get("lora_kind", "Weight")), rng)
+                imported = None
+                if checkpoint_mode == "fromImg":
+                    image_dir = Path(profile_cfg.get("from_img_path", gen.get("from_img_path", "")))
+                    if not image_dir.is_absolute():
+                        image_dir = Path(config.get("base_dir", ".")) / image_dir
+                    imported = from_image.load(profile, image_dir)
+                if imported:
                     prompt, checkpoint, character, loras = imported
-                    import copy
                     workflow = copy.deepcopy(prompt)
                 else:
-                    character_mode = profile_cfg.get("character_kind", gen.get("character_kind", "Weight"))
-                    lora_mode = profile_cfg.get("lora_kind", gen.get("lora_kind", "Weight"))
-                    checkpoint = selector.choose(profile, "checkpoint", "Weight" if checkpoint_mode == "fromImg" else checkpoint_mode)[0]
+                    if checkpoint_mode == "fromImg":
+                        log.warning("No compatible PNG workflow for %s; falling back to Weight", profile_name)
+                        checkpoint_mode = "Weight"
+                    checkpoint = selector.choose(profile, "checkpoint", checkpoint_mode)[0]
                     character = selector.choose(profile, "character", character_mode)[0] if profile.characters else None
                     lora_count = _count(gen.get("lora_count", [1, 2]), rng)
                     loras = selector.choose(profile, "lora", lora_mode, lora_count)
