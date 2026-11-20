@@ -24,22 +24,26 @@ class WorkflowBuilder:
         if not workflow:
             raise ValueError(f"Missing workflow_api.json for profile {profile.name}")
         self._apply_settings(workflow, profile.setup_workflow)
-        self._set_checkpoint(workflow, profile.name, checkpoint.path.name)
+        self._set_checkpoint(workflow, profile.name, checkpoint.relative_path)
         if character:
-            self._set_first_input(workflow, ("LoraLoader",), "lora_name", character.path.name)
+            self._set_first_input(workflow, ("LoraLoader",), "lora_name", character.relative_path)
         self._attach_loras(workflow, loras)
         self._randomize_seeds(workflow)
-        metadata = [profile.metadata["checkpoint"].get(checkpoint.name, {})]
+        metadata = [self._metadata(profile, checkpoint)]
         if character:
-            metadata.append(profile.metadata["character"].get(character.name, {}))
-        metadata.extend(profile.metadata["lora"].get(item.name, {}) for item in loras)
-        for item in [checkpoint, *([character] if character else []), *loras]:
-            source = profile.metadata[item.category].get(item.name, {})
-            self._apply_node_metadata(workflow, source)
+            metadata.append(self._metadata(profile, character))
+        metadata.extend(self._metadata(profile, item) for item in loras)
+        for item in assets:
+            self._apply_node_metadata(workflow, self._metadata(profile, item))
         self._apply_character_defaults(workflow, profile, character)
         self._apply_lora_defaults(workflow, profile, loras)
         self._apply_prompt_metadata(workflow, profile, checkpoint, character, loras)
         return self.wildcards.apply(workflow, profile.setup_wildcard, metadata)
+
+    @staticmethod
+    def _metadata(profile, item):
+        return profile.metadata[item.category].get(item.relative_path,
+               profile.metadata[item.category].get(item.name, {}))
 
     def _apply_settings(self, workflow: dict, settings: dict) -> None:
         workflow_settings = settings.get("workflow", {})
@@ -80,11 +84,11 @@ class WorkflowBuilder:
                 return True
         return False
 
-    def _set_checkpoint(self, workflow, profile_name, filename):
-        if profile_name == "Anime" and self._set_first_input(workflow, ("UNETLoader",), "unet_name", filename):
+    def _set_checkpoint(self, workflow, profile_name, relative_path):
+        if profile_name == "Anime" and self._set_first_input(workflow, ("UNETLoader",), "unet_name", relative_path):
             return
-        if not self._set_first_input(workflow, ("CheckpointLoaderSimple",), "ckpt_name", filename):
-            self._set_first_input(workflow, ("UNETLoader",), "unet_name", filename)
+        if not self._set_first_input(workflow, ("CheckpointLoaderSimple",), "ckpt_name", relative_path):
+            self._set_first_input(workflow, ("UNETLoader",), "unet_name", relative_path)
 
     def _attach_loras(self, workflow, loras):
         template = workflow.get("LoraLoader")
@@ -95,7 +99,7 @@ class WorkflowBuilder:
             node_id = f"LoraLoader{index}"
             workflow[node_id] = copy.deepcopy(template)
             inputs = workflow[node_id].setdefault("inputs", {})
-            inputs["lora_name"] = lora.path.name
+            inputs["lora_name"] = lora.relative_path
             prior_inputs = workflow.get(next_node, {}).get("inputs", {})
             if "model" in prior_inputs:
                 inputs["model"] = prior_inputs["model"]
@@ -119,21 +123,21 @@ class WorkflowBuilder:
                 workflow[node_id].setdefault("inputs", {}).update(copy.deepcopy(values))
 
     def _apply_character_defaults(self, workflow, profile, character):
+        node = workflow.get("LoraLoader", {})
+        inputs = node.get("inputs", {})
         if not character:
-            node = workflow.get("LoraLoader", {})
-            inputs = node.get("inputs", {})
             for key in ("strength_model", "strength_clip"):
                 if key in inputs:
                     inputs[key] = 0.0
             return
-        defaults = profile.setup_workflow.get("charDefault", {})
-        metadata = profile.metadata["character"].get(character.name, {})
-        self._apply_strengths(workflow.get("LoraLoader", {}), metadata, defaults)
+        self._apply_strengths(node, self._metadata(profile, character),
+                              profile.setup_workflow.get("charDefault", {}))
 
     def _apply_lora_defaults(self, workflow, profile, loras):
         defaults = profile.setup_workflow.get("loraDefault", {})
         for index, lora in enumerate(loras, start=1):
-            self._apply_strengths(workflow.get(f"LoraLoader{index}", {}), profile.metadata["lora"].get(lora.name, {}), defaults)
+            self._apply_strengths(workflow.get(f"LoraLoader{index}", {}),
+                                  self._metadata(profile, lora), defaults)
 
     def _apply_strengths(self, node, metadata, defaults):
         inputs = node.get("inputs", {})
