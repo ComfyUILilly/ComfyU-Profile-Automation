@@ -70,10 +70,13 @@ def main() -> int:
                      profile_name, index + 1, batch_count, checkpoint.relative_path,
                      character.relative_path if character else "-", [item.relative_path for item in loras])
             if args.dry_run:
+                log.info("Dry-run: workflow prepared; not sent to ComfyUI")
                 continue
             client.queue_prompt(workflow)
             if config["generation"].get("wait_for_queue", True):
                 client.wait_until_idle(poll_interval=config["generation"].get("poll_interval", 1))
+        if args.dry_run:
+            return 0
     return 0
 
 
