@@ -62,6 +62,10 @@ class WorkflowBuilder:
 
     def prepare_from_image(self, profile, prompt, checkpoint, character, loras):
         workflow = copy.deepcopy(prompt)
+        self._apply_settings(workflow, profile.setup_workflow)
+        checkpoint_metadata = self._metadata(profile, checkpoint)
+        self._apply_checkpoint_sampler(workflow, checkpoint_metadata)
+        self._apply_node_metadata(workflow, checkpoint_metadata)
         assets = [*([character] if character else []), *loras]
         for node in workflow.values():
             if not isinstance(node, dict) or not str(node.get("class_type", "")).startswith("LoraLoader"):
@@ -70,8 +74,10 @@ class WorkflowBuilder:
             stem = filename.replace("\\\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0]
             item = next((asset for asset in assets if asset.name == stem), None)
             if item:
+                item_metadata = self._metadata(profile, item)
+                self._apply_node_metadata(workflow, item_metadata)
                 defaults = profile.setup_workflow.get("charDefault" if item.category == "character" else "loraDefault", {})
-                self._apply_strengths(node, self._metadata(profile, item), defaults)
+                self._apply_strengths(node, item_metadata, defaults)
         self._randomize_seeds(workflow)
         self._set_save_prefix(workflow, profile, checkpoint, character, loras)
         for node_id in ("PrimitiveStringMultilineP", "PrimitiveStringMultilineN"):
