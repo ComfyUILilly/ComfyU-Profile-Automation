@@ -27,7 +27,9 @@ class WorkflowBuilder:
         self._set_checkpoint(workflow, profile.name, checkpoint.relative_path)
         if character:
             self._set_first_input(workflow, ("LoraLoader",), "lora_name", character.relative_path)
-        self._attach_loras(workflow, loras)
+        checkpoint_metadata = self._metadata(profile, checkpoint)
+        self._apply_checkpoint_sampler(workflow, checkpoint_metadata)
+        self._attach_loras(workflow, loras, profile.name, checkpoint_metadata)
         self._randomize_seeds(workflow)
         metadata = [self._metadata(profile, checkpoint)]
         if character:
@@ -94,7 +96,7 @@ class WorkflowBuilder:
         if not self._set_first_input(workflow, ("CheckpointLoaderSimple",), "ckpt_name", relative_path):
             self._set_first_input(workflow, ("UNETLoader",), "unet_name", relative_path)
 
-    def _attach_loras(self, workflow, loras):
+    def _attach_loras(self, workflow, loras, profile_name, checkpoint_metadata):
         template = workflow.get("LoraLoader")
         if not isinstance(template, dict):
             return
@@ -105,14 +107,30 @@ class WorkflowBuilder:
             inputs = workflow[node_id].setdefault("inputs", {})
             inputs["lora_name"] = lora.relative_path
             prior_inputs = workflow.get(next_node, {}).get("inputs", {})
-            if "model" in prior_inputs:
-                inputs["model"] = prior_inputs["model"]
-            if "clip" in prior_inputs:
-                inputs["clip"] = prior_inputs["clip"]
+            model_connection = prior_inputs.get("model")
+            clip_connection = prior_inputs.get("clip")
+            if profile_name != "Anime":
+                if isinstance(checkpoint_metadata.get("ModelSamplingDiscrete"), dict):
+                    model_connection = ["ModelSamplingDiscrete", 0]
+                if isinstance(checkpoint_metadata.get("CLIPSetLastLayer"), dict):
+                    clip_connection = ["CLIPSetLastLayer", 0]
+            if model_connection is not None:
+                inputs["model"] = model_connection
+            if clip_connection is not None:
+                inputs["clip"] = clip_connection
             if next_node in workflow:
                 workflow[next_node].setdefault("inputs", {})["model"] = [node_id, 0]
                 workflow[next_node].setdefault("inputs", {})["clip"] = [node_id, 1]
             next_node = node_id
+
+    def _apply_checkpoint_sampler(self, workflow, metadata):
+        sampler = workflow.get("KSampler")
+        if not isinstance(sampler, dict):
+            return
+        inputs = sampler.get("inputs", {})
+        for key, value in metadata.items():
+            if key in inputs:
+                inputs[key] = self._random_value(value)
 
     def _randomize_seeds(self, workflow):
         for node in workflow.values():
