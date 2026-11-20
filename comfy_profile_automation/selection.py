@@ -104,6 +104,7 @@ class AssetSelector:
             pool = {}
             if group.get("per"):
                 limit = self._random_count(group.get("perMax", 0))
+                per_candidates = {}
                 for key, entry in entries.items():
                     if not isinstance(entry, dict):
                         continue
@@ -114,7 +115,11 @@ class AssetSelector:
                     if self.rng.random() < chance:
                         for name in self._resolve_group_names(group_name, key, entry):
                             if name in aliases:
-                                pool[aliases[name].identity] = entry
+                                per_candidates[aliases[name].identity] = entry
+                per_ids = list(per_candidates)
+                if limit and per_ids:
+                    for identity in self.rng.sample(per_ids, min(limit, len(per_ids))):
+                        pool[identity] = per_candidates[identity]
             if group.get("weight"):
                 limit = self._random_count(group.get("weightMax", 0))
                 weighted_entries = []
