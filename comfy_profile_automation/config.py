@@ -6,6 +6,16 @@ from typing import Any
 import yaml
 
 
+class LegacySafeLoader(yaml.SafeLoader):
+    pass
+
+
+LegacySafeLoader.add_constructor(
+    "tag:yaml.org,2002:python/tuple",
+    lambda loader, node: tuple(loader.construct_sequence(node)),
+)
+
+
 def _legacy_profiles(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
     types = config.get("CheckpointTypes")
     if not isinstance(types, dict) or not types:
@@ -41,7 +51,7 @@ def load_config(path: str | Path) -> dict[str, Any]:
     if not config_path.exists():
         raise FileNotFoundError(f"Config not found: {config_path}. Copy config.example.yml to config.yml first.")
     with config_path.open("r", encoding="utf-8-sig") as stream:
-        config = yaml.safe_load(stream) or {}
+        config = yaml.load(stream, Loader=LegacySafeLoader) or {}
 
     if "data_path" not in config and "dataPath" in config:
         config["data_path"] = config["dataPath"]
