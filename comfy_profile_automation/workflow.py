@@ -18,8 +18,10 @@ class WorkflowBuilder:
         if not workflow:
             raise ValueError(f"Missing workflow_api.json for profile {profile.name}")
         self._apply_settings(workflow, profile.setup_workflow)
-        self._set_first_input(workflow, ("CheckpointLoaderSimple", "UNETLoader"),
-                              "ckpt_name", checkpoint.path.name)
+        if self._set_first_input(workflow, ("UNETLoader",), "unet_name", checkpoint.path.name):
+            pass
+        else:
+            self._set_first_input(workflow, ("CheckpointLoaderSimple",), "ckpt_name", checkpoint.path.name)
         if character:
             self._set_first_input(workflow, ("LoraLoader", "LoraLoaderModelOnly"),
                                   "lora_name", character.path.name)
@@ -37,9 +39,10 @@ class WorkflowBuilder:
 
     @staticmethod
     def _set_first_input(workflow: dict[str, Any], node_ids: tuple[str, ...],
-                         input_name: str, value: Any) -> None:
+                         input_name: str, value: Any) -> bool:
         for node_id in node_ids:
             node = workflow.get(node_id)
             if isinstance(node, dict):
                 node.setdefault("inputs", {})[input_name] = value
-                return
+                return True
+        return False
