@@ -9,7 +9,7 @@ from .wildcards import WildcardEngine
 
 
 class WorkflowBuilder:
-    """Build profile-isolated ComfyUI API prompts, preserving node connections."""
+    """Build profile-isolated ComfyUI API prompts, including YAML prompt metadata."""
 
     def __init__(self, rng: random.Random | None = None):
         self.rng = rng or random.Random()
@@ -27,32 +27,48 @@ class WorkflowBuilder:
         self._set_checkpoint(workflow, profile.name, checkpoint.path.name)
         if character:
             self._set_first_input(workflow, ("LoraLoader",), "lora_name", character.path.name)
-        self._attach_loras(workflow, loras, profile.name)
+        self._attach_loras(workflow, loras)
         self._randomize_seeds(workflow)
-        self._apply_checkpoint_metadata(workflow, profile, checkpoint)
-        self._apply_lora_metadata(workflow, profile, character, loras)
+        metadata = [profile.metadata["checkpoint"].get(checkpoint.name, {})]
+        if character:
+            metadata.append(profile.metadata["character"].get(character.name, {}))
+        metadata.extend(profile.metadata["lora"].get(item.name, {}) for item in loras)
+        for item in [checkpoint, *([character] if character else []), *loras]:
+            source = profile.metadata[item.category].get(item.name, {})
+            self._apply_node_metadata(workflow, source)
+        self._apply_character_defaults(workflow, profile, character)
+        self._apply_lora_defaults(workflow, profile, loras)
         self._apply_prompt_metadata(workflow, profile, checkpoint, character, loras)
-        return self.wildcards.apply(workflow, profile.setup_wildcard)
+        return self.wildcards.apply(workflow, profile.setup_wildcard, metadata)
 
-    @staticmethod
-    def _apply_settings(workflow: dict, settings: dict) -> None:
-        workflow_settings = settings.get("workflow", settings)
+    def _apply_settings(self, workflow: dict, settings: dict) -> None:
+        workflow_settings = settings.get("workflow", {})
         for node_id, values in workflow_settings.items():
-            if node_id in ("charDefault", "loraDefault", "workflow_scale", "workflow_min", "workflow_max"):
-                continue
             if node_id in workflow and isinstance(values, dict):
                 for key, value in values.items():
-                    workflow[node_id].setdefault("inputs", {})[key] = WorkflowBuilder._random_value(value)
+                    workflow[node_id].setdefault("inputs", {})[key] = self._random_value(value)
+        for meta in ("workflow_scale", "workflow_min", "workflow_max"):
+            for node_id, values in settings.get(meta, {}).items():
+                if node_id not in workflow or not isinstance(values, dict):
+                    continue
+                for key, raw in values.items():
+                    if key not in workflow[node_id].get("inputs", {}):
+                        continue
+                    amount = self._random_value(raw)
+                    current = workflow[node_id]["inputs"][key]
+                    if meta == "workflow_scale":
+                        workflow[node_id]["inputs"][key] = current * amount
+                    elif meta == "workflow_min":
+                        workflow[node_id]["inputs"][key] = max(current, amount)
+                    else:
+                        workflow[node_id]["inputs"][key] = min(current, amount)
 
-    @staticmethod
-    def _random_value(value):
+    def _random_value(self, value):
         if isinstance(value, (list, tuple)) and value:
-            if len(value) == 2 and all(isinstance(v, (int, float)) for v in value):
-                low, high = value
-                if low > high:
-                    low, high = high, low
-                return random.uniform(low, high) if any(isinstance(v, float) for v in value) else random.randint(int(low), int(high))
-            return random.choice(list(value))
+            if len(value) == 2 and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in value):
+                low, high = sorted(value)
+                return self.rng.uniform(low, high) if any(isinstance(v, float) for v in value) else self.rng.randint(int(low), int(high))
+            return self.rng.choice(list(value))
         return value
 
     @staticmethod
@@ -70,7 +86,7 @@ class WorkflowBuilder:
         if not self._set_first_input(workflow, ("CheckpointLoaderSimple",), "ckpt_name", filename):
             self._set_first_input(workflow, ("UNETLoader",), "unet_name", filename)
 
-    def _attach_loras(self, workflow, loras, profile_name):
+    def _attach_loras(self, workflow, loras):
         template = workflow.get("LoraLoader")
         if not isinstance(template, dict):
             return
@@ -80,12 +96,11 @@ class WorkflowBuilder:
             workflow[node_id] = copy.deepcopy(template)
             inputs = workflow[node_id].setdefault("inputs", {})
             inputs["lora_name"] = lora.path.name
-            model = workflow.get(next_node, {}).get("inputs", {}).get("model")
-            clip = workflow.get(next_node, {}).get("inputs", {}).get("clip")
-            if model is not None:
-                inputs["model"] = model
-            if clip is not None:
-                inputs["clip"] = clip
+            prior_inputs = workflow.get(next_node, {}).get("inputs", {})
+            if "model" in prior_inputs:
+                inputs["model"] = prior_inputs["model"]
+            if "clip" in prior_inputs:
+                inputs["clip"] = prior_inputs["clip"]
             if next_node in workflow:
                 workflow[next_node].setdefault("inputs", {})["model"] = [node_id, 0]
                 workflow[next_node].setdefault("inputs", {})["clip"] = [node_id, 1]
@@ -97,20 +112,35 @@ class WorkflowBuilder:
                 if "seed" in node["inputs"]:
                     node["inputs"]["seed"] = self.rng.randint(0, 2**63 - 1)
 
-    def _apply_checkpoint_metadata(self, workflow, profile, checkpoint):
-        metadata = profile.metadata["checkpoint"].get(checkpoint.name, {})
-        self._apply_node_metadata(workflow, metadata)
-
-    def _apply_lora_metadata(self, workflow, profile, character, loras):
-        for item in ([character] if character else []) + loras:
-            metadata = profile.metadata["character" if item.category == "character" else "lora"].get(item.name, {})
-            self._apply_node_metadata(workflow, metadata)
-
     @staticmethod
     def _apply_node_metadata(workflow, metadata):
         for node_id, values in metadata.items():
             if node_id in workflow and isinstance(values, dict):
                 workflow[node_id].setdefault("inputs", {}).update(copy.deepcopy(values))
+
+    def _apply_character_defaults(self, workflow, profile, character):
+        if not character:
+            node = workflow.get("LoraLoader", {})
+            inputs = node.get("inputs", {})
+            for key in ("strength_model", "strength_clip"):
+                if key in inputs:
+                    inputs[key] = 0.0
+            return
+        defaults = profile.setup_workflow.get("charDefault", {})
+        metadata = profile.metadata["character"].get(character.name, {})
+        self._apply_strengths(workflow.get("LoraLoader", {}), metadata, defaults)
+
+    def _apply_lora_defaults(self, workflow, profile, loras):
+        defaults = profile.setup_workflow.get("loraDefault", {})
+        for index, lora in enumerate(loras, start=1):
+            self._apply_strengths(workflow.get(f"LoraLoader{index}", {}), profile.metadata["lora"].get(lora.name, {}), defaults)
+
+    def _apply_strengths(self, node, metadata, defaults):
+        inputs = node.get("inputs", {})
+        for key in ("strength_model", "strength_clip", "A", "B", "preset", "block_vector"):
+            value = metadata.get(key, defaults.get(key))
+            if value is not None:
+                inputs[key] = self._random_value(value)
 
     @staticmethod
     def _apply_prompt_metadata(workflow, profile, checkpoint, character, loras):
@@ -120,4 +150,4 @@ class WorkflowBuilder:
             if character:
                 lines.append(f"Character: {character.relative_path}")
             lines.extend(f"LoRA: {item.relative_path}" for item in loras)
-            info.setdefault("inputs", {})["value"] = "\n".join(lines) + "\n"
+            info.setdefault("inputs", {})["value"] = "\\n".join(lines) + "\\n"
