@@ -58,7 +58,9 @@ class FromImageWorkflow:
         value = prompt.get(node_id, {}).get("inputs", {}).get(key)
         filename = Path(str(value or "").replace("\\", "/")).name
         stem = Path(filename).stem
-        item = next((x for x in profile.checkpoints if x.name == stem or x.path.name == filename), None)
+        exact = [x for x in profile.checkpoints if x.path.name == filename]
+        stem_matches = [x for x in profile.checkpoints if x.name == stem]
+        item = exact[0] if len(exact) == 1 else stem_matches[0] if len(stem_matches) == 1 else None
         return node_id, key, item
 
     @staticmethod
@@ -72,9 +74,9 @@ class FromImageWorkflow:
             if not value:
                 continue
             filename = Path(str(value).replace("\\", "/")).name
-            item = next((x for x in available if x.path.name == filename), None)
-            if item is None:
-                item = next((x for x in available if x.name == Path(filename).stem), None)
+            exact = [x for x in available if x.path.name == filename]
+            stem_matches = [x for x in available if x.name == Path(filename).stem]
+            item = exact[0] if len(exact) == 1 else stem_matches[0] if len(stem_matches) == 1 else None
             if item is None:
                 return None, None, None
             nodes.append((node_id, item))
