@@ -62,7 +62,6 @@ class WorkflowBuilder:
 
     def prepare_from_image(self, profile, prompt, checkpoint, character, loras):
         workflow = copy.deepcopy(prompt)
-        metadata = []
         assets = [*([character] if character else []), *loras]
         for node in workflow.values():
             if not isinstance(node, dict) or not str(node.get("class_type", "")).startswith("LoraLoader"):
@@ -167,8 +166,7 @@ class WorkflowBuilder:
                 if "seed" in node["inputs"]:
                     node["inputs"]["seed"] = self.rng.randint(0, 2**63 - 1)
 
-    @staticmethod
-    def _apply_node_metadata(workflow, metadata):
+    def _apply_node_metadata(self, workflow, metadata):
         for node_id, values in metadata.items():
             if node_id in workflow and isinstance(values, dict):
                 inputs = workflow[node_id].setdefault("inputs", {})
