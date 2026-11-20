@@ -31,17 +31,25 @@ class WorkflowBuilder:
         self._apply_checkpoint_sampler(workflow, checkpoint_metadata)
         self._attach_loras(workflow, loras, profile.name, checkpoint_metadata)
         self._randomize_seeds(workflow)
-        metadata = [self._metadata(profile, checkpoint)]
-        if character:
-            metadata.append(self._metadata(profile, character))
-        metadata.extend(self._metadata(profile, item) for item in loras)
-        metadata.extend(weight_metadata or [])
+        checkpoint_metadata = self._metadata(profile, checkpoint)
+        character_metadata = self._metadata(profile, character) if character else profile.setup_wildcard.get("CharWildcard", {})
+        lora_metadata = [self._metadata(profile, item) for item in loras]
+        if not lora_metadata:
+            lora_metadata = [profile.setup_wildcard.get("LoraWildcard", {})]
+        wildcard_sources = []
+        if checkpoint_metadata.get("Setup", True):
+            wildcard_sources.append(profile.setup_wildcard)
+        wildcard_sources.append(checkpoint_metadata)
+        wildcard_sources.append(character_metadata)
+        wildcard_sources.extend(weight_metadata or [])
+        wildcard_sources.extend(lora_metadata)
         for item in assets:
             self._apply_node_metadata(workflow, self._metadata(profile, item))
         self._apply_character_defaults(workflow, profile, character)
         self._apply_lora_defaults(workflow, profile, loras)
         self._apply_prompt_metadata(workflow, profile, checkpoint, character, loras)
-        return self.wildcards.apply(workflow, profile.setup_wildcard, metadata)
+        return self.wildcards.apply(workflow, profile.setup_wildcard, wildcard_sources,
+                                    shuffle=profile.setup_wildcard.get("shuffleWildcard", False))
 
     @staticmethod
     def _metadata(profile, item):
@@ -54,10 +62,7 @@ class WorkflowBuilder:
 
     def prepare_from_image(self, profile, prompt, checkpoint, character, loras):
         workflow = copy.deepcopy(prompt)
-        metadata = [self._metadata(profile, checkpoint)]
-        if character:
-            metadata.append(self._metadata(profile, character))
-        metadata.extend(self._metadata(profile, item) for item in loras)
+        metadata = []
         assets = [*([character] if character else []), *loras]
         for node in workflow.values():
             if not isinstance(node, dict) or not str(node.get("class_type", "")).startswith("LoraLoader"):
@@ -69,7 +74,10 @@ class WorkflowBuilder:
                 defaults = profile.setup_workflow.get("charDefault" if item.category == "character" else "loraDefault", {})
                 self._apply_strengths(node, self._metadata(profile, item), defaults)
         self._randomize_seeds(workflow)
-        return self.wildcards.apply(workflow, profile.setup_wildcard, metadata)
+        for node_id in ("PrimitiveStringMultilineP", "PrimitiveStringMultilineN"):
+            if node_id in workflow:
+                workflow[node_id].setdefault("inputs", {})["value"] = ""
+        return workflow
 
     def _apply_settings(self, workflow: dict, settings: dict) -> None:
         workflow_settings = settings.get("workflow", {})
