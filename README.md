@@ -1,15 +1,28 @@
 # ComfyU Profile Automation
 
-ComfyUI 이미지 자동 생성 스크립트의 프로필 분리형 재설계 프로젝트입니다.
+기존 ComfyUI 자동 생성 프로젝트를 **IL / Anime 프로필 분리형**으로 재구성한 프로젝트입니다.
 
-> 기존 `lilly1987/ComfyU-auto-script-call` 저장소는 참고용으로만 사용하며 이 프로젝트에서 수정하지 않습니다.
+기존 `lilly1987/ComfyU-auto-script-call` 저장소는 참고용으로만 사용하며 수정하지 않습니다.
 
-## 핵심 설계
+## 실행 원칙
 
-- **프로필을 먼저 선택**합니다. `IL` / `Anime`는 설정 가중치로 선택하며, 한 프로필의 생성 묶음이 끝나면 다음 프로필을 다시 선택합니다.
-- 선택된 프로필의 Checkpoint, Character, LoRA, YAML, Wildcard, Workflow만 사용합니다. IL과 Anime 리소스를 서로 섞지 않습니다.
-- 프로필별 파일은 상대 경로를 식별자로 사용합니다. 같은 파일명이 서로 다른 하위 폴더에 있어도 덮어쓰지 않습니다.
-- ComfyUI API 전송은 별도 모듈로 분리합니다.
+1. IL / Anime 프로필을 설정 가중치에 따라 먼저 선택합니다.
+2. 선택된 프로필 안에서 Checkpoint, Character, LoRA를 선택합니다.
+3. 해당 프로필의 YAML, Wildcard, Workflow, 사용 기록만 사용합니다.
+4. 설정된 배치 생성 수가 끝난 후 다음 프로필을 다시 랜덤 선택합니다.
+5. 프로필 간 리소스 혼합은 차단합니다.
+
+## 지원 기능
+
+- Checkpoint / Character / LoRA의 Weight, Random, DB, Cycle, Favorites, Skip 선택
+- LoRA 그룹별 `WeightLora.yml`의 per / weight / total / limit 설정
+- Anime의 `UNETLoader`, IL의 `CheckpointLoaderSimple` 우선 처리
+- 프로필별 `setupWorkflow.yml`, `setupWildcard.yml`, 자산별 YAML 설정
+- positive / negative prompt 조합 및 중첩 Wildcard 확장
+- PNG `prompt` 메타데이터에서 API Workflow 복원(fromImg)
+- 프로필별 TinyDB 사용 횟수 기록 및 XLSX 내보내기
+- 프로필 데이터 및 모델 폴더 변경 감시(변경 내용은 다음 배치 로드부터 반영)
+- ComfyUI API 큐 전송 및 큐 대기
 
 ## 설치 및 실행
 
@@ -17,28 +30,26 @@ Python 3.10+ 및 실행 중인 ComfyUI가 필요합니다.
 
 ```bash
 python -m pip install -r requirements.txt
-python main.py --config config.yml
 ```
 
-Windows에서는 `run.bat`를 실행할 수 있습니다. 최초 실행 전 `config.example.yml`을 `config.yml`로 복사하고 실제 ComfyUI 경로를 확인하세요.
-
-데이터 폴더의 기본 구조는 아래 명령으로 만들 수 있습니다.
+`config.example.yml`을 `config.yml`로 복사한 뒤 ComfyUI 경로와 프로필별 모델 경로를 수정합니다.
 
 ```bash
 python scripts/init_data.py
+python main.py --config config.yml
 ```
 
-이 명령은 IL/Anime별 YAML 파일과 빈 `workflow_api.json`을 생성합니다. 각 프로필의 실제 API 워크플로우 JSON은 직접 복사해 넣어야 합니다. 모델 파일은 `config.yml`의 `checkpoint_path`, `character_path`, `lora_path`가 가리키는 ComfyUI 모델 폴더에서 읽습니다.
+일괄 테스트 전 워크플로우와 모델 경로를 확인하고 싶으면 `--dry-run`을 사용할 수 있습니다. dry-run은 프로필 한 배치의 프롬프트 구성을 출력하고 ComfyUI에 전송하지 않습니다.
 
-## 데이터 폴더
-
-기본 경로는 프로젝트 외부의 `../ComfyU-auto-script_data`입니다.
+## 데이터 구조
 
 ```text
 ComfyU-auto-script_data/
 ├── IL/
 │   ├── checkpoint/
 │   ├── lora/
+│   │   ├── char/
+│   │   └── etc/
 │   ├── WeightCheckpoint.yml
 │   ├── WeightChar.yml
 │   ├── WeightLora.yml
@@ -48,6 +59,8 @@ ComfyU-auto-script_data/
 └── Anime/
     ├── checkpoint/
     ├── lora/
+    │   ├── char/
+    │   └── etc/
     ├── WeightCheckpoint.yml
     ├── WeightChar.yml
     ├── WeightLora.yml
@@ -56,12 +69,16 @@ ComfyU-auto-script_data/
     └── workflow_api.json
 ```
 
-`Anime` 폴더명은 요청한 그대로 유지합니다.
+각 프로필의 실제 API 형식 `workflow_api.json`과 YAML 설정은 기존 프로젝트의 파일을 해당 프로필 폴더로 옮겨서 사용합니다. `fromImg`를 사용하려면 프로필의 `from_img_path`에 PNG 결과 이미지가 들어 있는 폴더를 지정해야 합니다.
 
-## 현재 구현 범위
+## 선택 모드 설정
 
-초기 기반 코드에는 프로필 단위 선택기, 프로필 격리형 리소스 카탈로그, 가중치 선택, Workflow 로딩/치환, ComfyUI 큐 전송, 기본 테스트가 포함됩니다. 기존 프로젝트의 모든 선택 모드(DB/Favorites/fromImg/Observer/TinyDB 등)를 완전히 이식한 상태는 아닙니다. 이식은 기존 설정 및 각 로직을 대조해 단계적으로 진행합니다.
+`checkpoint_kind`, `character_kind`, `lora_kind`는 문자열 하나 또는 가중치 딕셔너리로 지정할 수 있습니다. 예: `{Weight: 4, Random: 1, DB: 1, Cycle: 1}`.
 
-```bash
-python -m unittest discover -s tests -v
-```
+`Favorites` / `Skip` 모드는 각 자산 YAML의 `favorites` / `skip` 값으로 후보를 필터링합니다. `WeightLora.yml`은 기존 그룹형 구조(`per`, `weight`, `total`, `*Max`, `dic`)를 사용합니다.
+
+## 참고
+
+- `count.db`는 프로필별 `database/usage.json`으로 분리됩니다.
+- 모델 식별자는 파일명만이 아니라 프로필·종류·상대 경로를 포함합니다.
+- 이 프로젝트는 사용자의 ComfyUI 설치 및 실제 Workflow 노드 ID에 따라 경로/노드 설정을 조정해야 합니다.
