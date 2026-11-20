@@ -18,7 +18,8 @@ class UsageDatabase:
         safe_profile = profile.replace("/", "_")
         return self.db.table(f"{safe_profile}__{category}")
 
-    def record(self, profile: str, checkpoint: str, character: str | None, loras: list[str]) -> None:
+    def record(self, profile: str, checkpoint: str, character: str | None, loras: list[str],
+               tags: list[str] | None = None) -> None:
         query = Query()
         values_by_category = {
             "checkpoint": [checkpoint],
@@ -40,6 +41,16 @@ class UsageDatabase:
             combination.update({"count": int(row.get("count", 0)) + 1}, doc_ids=[row.doc_id])
         else:
             combination.insert({"signature": signature, "count": 1})
+        tag_table = self._table(profile, "tag")
+        for tag in tags or []:
+            tag = str(tag).strip()
+            if not tag:
+                continue
+            row = tag_table.get(query.tag == tag)
+            if row:
+                tag_table.update({"count": int(row.get("count", 0)) + 1}, doc_ids=[row.doc_id])
+            else:
+                tag_table.insert({"tag": tag, "count": 1})
 
     def counts(self, profile: str, category: str) -> dict[str, int]:
         return {row["asset"]: int(row.get("count", 0))
