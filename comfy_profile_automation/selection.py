@@ -29,6 +29,7 @@ class AssetSelector:
 
     def choose(self, profile: ProfileData, category: str, kind: str = "Weight",
                count: int = 1) -> list[ModelFile]:
+        self.last_group_metadata = []
         source = {"checkpoint": profile.checkpoints, "character": profile.characters, "lora": profile.loras}[category]
         if not source:
             return []
@@ -141,9 +142,10 @@ class AssetSelector:
             chosen = list(pool)
             if group.get("total"):
                 chosen = self.rng.sample(chosen, min(total_max, len(chosen)))
-            selected.update({identity: True for identity in chosen})
+            selected.update({identity: pool.get(identity, {}) for identity in chosen})
         if not selected:
             return self._weighted_sample(candidates, profile.weights.get("lora", {}), min(1, len(candidates)))
+        self.last_group_metadata = list(selected.values())
         return [next(item for item in candidates if item.identity == identity)
                 for identity in selected]
 
