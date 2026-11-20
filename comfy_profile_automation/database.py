@@ -33,6 +33,13 @@ class UsageDatabase:
                     table.update({"count": int(row.get("count", 0)) + 1}, doc_ids=[row.doc_id])
                 else:
                     table.insert({"asset": value, "count": 1})
+        combination = self._table(profile, "combination")
+        signature = {"checkpoint": checkpoint, "character": character, "loras": sorted(loras)}
+        row = combination.get(query.signature == signature)
+        if row:
+            combination.update({"count": int(row.get("count", 0)) + 1}, doc_ids=[row.doc_id])
+        else:
+            combination.insert({"signature": signature, "count": 1})
 
     def counts(self, profile: str, category: str) -> dict[str, int]:
         return {row["asset"]: int(row.get("count", 0))
