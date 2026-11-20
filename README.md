@@ -83,6 +83,6 @@ ComfyU-auto-script_data/
 
 ## 참고
 
-- `count.db`는 프로필별 `database/usage.json`으로 분리됩니다.
+- 사용 기록은 프로필별 `database/usage.json`으로 분리되고, XLSX로 내보낼 수 있습니다.
 - 모델 식별자는 파일명만이 아니라 프로필·종류·상대 경로를 포함합니다.
 - 이 프로젝트는 사용자의 ComfyUI 설치 및 실제 Workflow 노드 ID에 따라 경로/노드 설정을 조정해야 합니다.
