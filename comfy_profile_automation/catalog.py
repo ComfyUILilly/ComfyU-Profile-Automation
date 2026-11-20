@@ -34,16 +34,23 @@ class ProfileData:
 
 
 class ProfileCatalog:
-    """Load assets/settings for one profile only; relative paths are stable IDs."""
+    """Load one profile's YAML data and model files without crossing profiles."""
 
     MODEL_SUFFIXES = {".safetensors", ".ckpt", ".pt", ".pth"}
 
-    def __init__(self, data_path: Path, profiles: dict[str, dict[str, Any]]):
+    def __init__(self, data_path: Path, profiles: dict[str, dict[str, Any]],
+                 base_dir: Path | None = None):
         self.data_path = data_path.expanduser().resolve()
+        self.profiles = profiles
         self.profile_names = tuple(profiles)
+        self.base_dir = (base_dir or Path.cwd()).expanduser().resolve()
 
-    def _scan(self, profile: str, category: str, folder: str) -> list[ModelFile]:
-        root = self.data_path / profile / folder
+    def _scan(self, profile: str, category: str, fallback_folder: str) -> list[ModelFile]:
+        configured = self.profiles[profile].get(f"{category}_path")
+        root = Path(configured).expanduser() if configured else self.data_path / profile / fallback_folder
+        if not root.is_absolute():
+            root = self.base_dir / root
+        root = root.resolve()
         if not root.exists():
             return []
         items = []
@@ -64,10 +71,11 @@ class ProfileCatalog:
         if profile not in self.profile_names:
             raise KeyError(f"Unknown profile: {profile}")
         root = self.data_path / profile
+        settings = self.profiles[profile]
         checkpoints = self._scan(profile, "checkpoint", "checkpoint")
         characters = self._scan(profile, "character", "lora/char")
         loras = self._scan(profile, "lora", "lora/etc")
-        workflow_path = root / "workflow_api.json"
+        workflow_path = root / settings.get("workflow_file", "workflow_api.json")
         workflow: dict[str, Any] = {}
         if workflow_path.exists():
             with workflow_path.open("r", encoding="utf-8-sig") as stream:
