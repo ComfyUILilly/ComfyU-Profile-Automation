@@ -53,7 +53,7 @@ class WorkflowBuilder:
 
     @staticmethod
     def _metadata(profile, item):
-        metadata = profile.metadata[item.category]
+        metadata = profile.metadata.get(item.category, {})
         if item.relative_path in metadata:
             return metadata[item.relative_path]
         collection_name = {"checkpoint": "checkpoints", "character": "characters", "lora": "loras"}[item.category]
@@ -86,7 +86,11 @@ class WorkflowBuilder:
         return workflow
 
     def _apply_settings(self, workflow: dict, settings: dict) -> None:
-        workflow_settings = settings.get("workflow", {})
+        workflow_settings = settings.get("workflow")
+        if not isinstance(workflow_settings, dict):
+            excluded = {"charDefault", "loraDefault", "workflow_scale", "workflow_min", "workflow_max"}
+            workflow_settings = {key: value for key, value in settings.items()
+                                 if key not in excluded and isinstance(value, dict)}
         for node_id, values in workflow_settings.items():
             if node_id in workflow and isinstance(values, dict):
                 for key, value in values.items():
