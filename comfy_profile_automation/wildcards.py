@@ -63,7 +63,6 @@ class WildcardEngine:
     def apply(self, workflow: dict, profile_wildcards: dict[str, Any],
               metadata: list[dict[str, Any]] | None = None, shuffle: Any = False) -> dict:
         prompts = {"positive": {}, "negative": {}}
-        self._merge(prompts, profile_wildcards)
         for source in metadata or []:
             self._merge(prompts, source)
 
@@ -76,7 +75,7 @@ class WildcardEngine:
         for section, suffix in (("positive", "P"), ("negative", "N")):
             values = list(prompts[section].values())
             if isinstance(shuffle, (list, tuple)) and len(shuffle) == 2:
-                should_shuffle = bool(self._pick(shuffle))
+                should_shuffle = bool(self.rng.choice(list(shuffle)))
             else:
                 should_shuffle = bool(shuffle)
             if should_shuffle:
