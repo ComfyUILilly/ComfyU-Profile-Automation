@@ -14,6 +14,8 @@ class WorkflowBuilder:
     def __init__(self, rng: random.Random | None = None):
         self.rng = rng or random.Random()
         self.wildcards = WildcardEngine(self.rng)
+        self._base_lora_node_id = "LoraLoader"
+        self._last_lora_node_ids = []
 
     def build(self, profile: ProfileData, checkpoint: ModelFile,
               character: ModelFile | None, loras: list[ModelFile], weight_metadata: list[dict] | None = None) -> dict[str, Any]:
@@ -129,18 +131,42 @@ class WorkflowBuilder:
         return False
 
     def _set_checkpoint(self, workflow, profile_name, relative_path):
-        if profile_name == "Anime" and self._set_first_input(workflow, ("UNETLoader",), "unet_name", relative_path):
+        preferred = ("UNETLoader",) if profile_name == "Anime" else ("CheckpointLoaderSimple",)
+        fallback = ("CheckpointLoaderSimple", "UNETLoader") if profile_name == "Anime" else ("UNETLoader", "CheckpointLoaderSimple")
+        if self._set_first_input(workflow, preferred, "unet_name" if profile_name == "Anime" else "ckpt_name", relative_path):
             return
-        if not self._set_first_input(workflow, ("CheckpointLoaderSimple",), "ckpt_name", relative_path):
-            self._set_first_input(workflow, ("UNETLoader",), "unet_name", relative_path)
+        for node_id, node in workflow.items():
+            class_type = str(node.get("class_type", "")) if isinstance(node, dict) else ""
+            if class_type == "UNETLoader":
+                node.setdefault("inputs", {})["unet_name"] = relative_path
+                return
+            if class_type == "CheckpointLoaderSimple":
+                node.setdefault("inputs", {})["ckpt_name"] = relative_path
+                return
+        for node_id in fallback:
+            node = workflow.get(node_id)
+            if isinstance(node, dict):
+                key = "unet_name" if node_id == "UNETLoader" else "ckpt_name"
+                node.setdefault("inputs", {})[key] = relative_path
+                return
 
     def _attach_loras(self, workflow, loras, profile_name, checkpoint_metadata):
-        template = workflow.get("LoraLoader")
-        if not isinstance(template, dict):
+        self._last_lora_node_ids = []
+        template_id = "LoraLoader" if isinstance(workflow.get("LoraLoader"), dict) else next(
+            (node_id for node_id, node in workflow.items()
+             if isinstance(node, dict) and str(node.get("class_type", "")).startswith("LoraLoader")),
+            None
+        )
+        if template_id is None:
             return
-        next_node = "LoraLoader"
+        self._base_lora_node_id = template_id
+        template = workflow[template_id]
+        next_node = template_id
         for index, lora in enumerate(loras, start=1):
-            node_id = f"LoraLoader{index}"
+            node_id = f"LoraLoaderAuto{index}"
+            while node_id in workflow:
+                node_id += "_"
+            self._last_lora_node_ids.append(node_id)
             workflow[node_id] = copy.deepcopy(template)
             inputs = workflow[node_id].setdefault("inputs", {})
             inputs["lora_name"] = lora.relative_path
@@ -163,6 +189,9 @@ class WorkflowBuilder:
 
     def _apply_checkpoint_sampler(self, workflow, metadata):
         sampler = workflow.get("KSampler")
+        if not isinstance(sampler, dict):
+            sampler = next((node for node in workflow.values()
+                            if isinstance(node, dict) and node.get("class_type") == "KSampler"), None)
         if not isinstance(sampler, dict):
             return
         inputs = sampler.get("inputs", {})
@@ -198,7 +227,10 @@ class WorkflowBuilder:
             workflow.pop("SaveImage1", None)
 
     def _apply_character_defaults(self, workflow, profile, character):
-        node = workflow.get("LoraLoader", {})
+        node = workflow.get(self._base_lora_node_id, {})
+        if not isinstance(node, dict):
+            node = next((value for value in workflow.values()
+                         if isinstance(value, dict) and str(value.get("class_type", "")).startswith("LoraLoader")), {})
         inputs = node.get("inputs", {})
         if not character:
             for key in ("strength_model", "strength_clip"):
@@ -210,8 +242,9 @@ class WorkflowBuilder:
 
     def _apply_lora_defaults(self, workflow, profile, loras):
         defaults = profile.setup_workflow.get("loraDefault", {})
-        for index, lora in enumerate(loras, start=1):
-            self._apply_strengths(workflow.get(f"LoraLoader{index}", {}),
+        for index, lora in enumerate(loras):
+            node_id = self._last_lora_node_ids[index] if index < len(self._last_lora_node_ids) else f"LoraLoader{index + 1}"
+            self._apply_strengths(workflow.get(node_id, {}),
                                   self._metadata(profile, lora), defaults)
 
     def _apply_strengths(self, node, metadata, defaults):
@@ -224,6 +257,9 @@ class WorkflowBuilder:
     @staticmethod
     def _apply_prompt_metadata(workflow, profile, checkpoint, character, loras):
         info = workflow.get("PrimitiveStringMultilineInfo")
+        if not isinstance(info, dict):
+            info = next((node for node in workflow.values()
+                         if isinstance(node, dict) and node.get("class_type") == "PrimitiveStringMultilineInfo"), None)
         if isinstance(info, dict):
             lines = [profile.name, f"Checkpoint: {checkpoint.relative_path}"]
             if character:
