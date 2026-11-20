@@ -108,6 +108,24 @@ class ProfileCatalog:
                     merged.update(data)
         return merged
 
+    @staticmethod
+    def _load_asset_metadata(path: Path, models: list[ModelFile]) -> dict[str, Any]:
+        merged = {}
+        for file in sorted(path.rglob("*.yml")) if path.exists() else []:
+            data = ProfileCatalog._yaml(file)
+            if not isinstance(data, dict):
+                continue
+            relative_yaml = file.relative_to(path).with_suffix("").as_posix()
+            matches = [
+                model for model in models
+                if model.relative_path.rsplit(".", 1)[0].endswith(relative_yaml)
+            ]
+            if len(matches) == 1:
+                model = matches[0]
+                merged[model.relative_path] = data.get(model.name, data)
+            merged.update(data)
+        return merged
+
     def load(self, profile: str) -> ProfileData:
         if profile not in self.profile_names:
             raise KeyError(f"Unknown profile: {profile}")
@@ -127,9 +145,9 @@ class ProfileCatalog:
             "lora": self._yaml(root / "WeightLora.yml"),
         }
         metadata = {
-            "checkpoint": self._merge_yaml_dir(root / "checkpoint"),
-            "character": self._merge_yaml_dir(root / "lora" / "char"),
-            "lora": self._merge_yaml_dir(root / "lora" / "etc"),
+            "checkpoint": self._load_asset_metadata(root / "checkpoint", checkpoints),
+            "character": self._load_asset_metadata(root / "lora" / "char", characters),
+            "lora": self._load_asset_metadata(root / "lora" / "etc", loras),
         }
         setup_workflow = self._deep_merge(
             self._yaml(self.data_path / "setupWorkflow.yml"),
