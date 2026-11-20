@@ -11,7 +11,7 @@ def _weighted(items: list[ModelFile], weights: dict[str, Any], rng: random.Rando
         raise ValueError("No selectable assets")
     values = []
     for item in items:
-        value = weights.get(item.relative_path, weights.get(item.name, 1))
+        value = weights.get(item.identity, weights.get(item.relative_path, weights.get(item.name, 1)))
         try:
             values.append(max(0.0, float(value)))
         except (TypeError, ValueError):
