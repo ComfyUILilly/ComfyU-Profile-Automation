@@ -9,7 +9,7 @@ _TOKEN = re.compile(r"__([A-Za-z0-9_.-]+)__")
 
 
 class WildcardEngine:
-    """Expand nested weighted wildcard tokens using only the active profile's definitions."""
+    """Expand nested weighted wildcard tokens using only active-profile definitions."""
 
     def __init__(self, rng: random.Random | None = None):
         self.rng = rng or random.Random()
@@ -40,12 +40,10 @@ class WildcardEngine:
                 break
             changed = False
             for match in reversed(matches):
-                key = match.group(1)
-                value = definitions.get(key)
-                if value is None:
-                    continue
-                result = result[:match.start()] + self._pick(value) + result[match.end():]
-                changed = True
+                value = definitions.get(match.group(1))
+                if value is not None:
+                    result = result[:match.start()] + self._pick(value) + result[match.end():]
+                    changed = True
             if not changed:
                 break
         return result
@@ -53,9 +51,10 @@ class WildcardEngine:
     def apply(self, workflow: dict, profile_wildcards: dict[str, Any],
               metadata: list[dict[str, Any]] | None = None) -> dict:
         definitions = {}
-        for section in ("positive", "negative"):
-            definitions.update(profile_wildcards.get(section, {}) or {})
-        definitions.update(profile_wildcards.get("wildcards", {}) or {})
+        for section in ("positive", "negative", "CharWildcard", "LoraWildcard", "wildcards"):
+            values = profile_wildcards.get(section, {}) or {}
+            if isinstance(values, dict):
+                definitions.update(values)
         prompt_parts = {"positive": [], "negative": []}
         for source in metadata or []:
             for section in prompt_parts:
@@ -65,22 +64,18 @@ class WildcardEngine:
                 elif isinstance(values, str) and values:
                     prompt_parts[section].append(values)
         for section in prompt_parts:
-            for key, value in (profile_wildcards.get(section, {}) or {}).items():
-                if isinstance(value, str) and value:
-                    prompt_parts[section].append(value)
+            values = profile_wildcards.get(section, {}) or {}
+            if isinstance(values, dict):
+                prompt_parts[section].extend(str(v) for v in values.values() if isinstance(v, str) and v)
         for node_id, node in workflow.items():
             if not isinstance(node, dict):
                 continue
-            class_type = str(node.get("class_type", ""))
             inputs = node.get("inputs", {})
-            if not isinstance(inputs, dict):
-                continue
-            if "text" not in inputs or not isinstance(inputs["text"], str):
+            if not isinstance(inputs, dict) or not isinstance(inputs.get("text"), str):
                 continue
             section = "negative" if node_id.endswith("N") or "negative" in node_id.lower() else "positive"
-            original = inputs["text"]
-            additions = prompt_parts[section]
-            if additions:
-                original = ", ".join([original, *additions]).strip(", ")
-            inputs["text"] = self.expand(original, definitions)
+            text_value = inputs["text"]
+            if prompt_parts[section]:
+                text_value = ", ".join([text_value, *prompt_parts[section]]).strip(", ")
+            inputs["text"] = self.expand(text_value, definitions)
         return workflow
