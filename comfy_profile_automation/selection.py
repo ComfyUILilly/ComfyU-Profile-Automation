@@ -70,8 +70,13 @@ class AssetSelector:
 
     @staticmethod
     def _metadata(profile, category, item):
-        return profile.metadata.get(category, {}).get(item.relative_path,
-               profile.metadata.get(category, {}).get(item.name, {}))
+        metadata = profile.metadata.get(category, {})
+        if item.relative_path in metadata:
+            return metadata[item.relative_path]
+        collection = {"checkpoint": profile.checkpoints, "character": profile.characters, "lora": profile.loras}[category]
+        if sum(1 for candidate in collection if candidate.name == item.name) == 1:
+            return metadata.get(item.name, {})
+        return {}
 
     @staticmethod
     def _has_group_weights(profile):
@@ -131,7 +136,7 @@ class AssetSelector:
             chosen = list(pool)
             if group.get("total"):
                 chosen = self.rng.sample(chosen, min(total_max, len(chosen)))
-            selected.update({name: by_name[name] for name in chosen})
+            selected.update({identity: True for identity in chosen})
         if not selected:
             return self._weighted_sample(candidates, profile.weights.get("lora", {}), min(1, len(candidates)))
         return [next(item for item in candidates if item.identity == identity)
