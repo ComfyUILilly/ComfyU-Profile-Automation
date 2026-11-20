@@ -42,8 +42,12 @@ class WorkflowBuilder:
 
     @staticmethod
     def _metadata(profile, item):
-        return profile.metadata[item.category].get(item.relative_path,
-               profile.metadata[item.category].get(item.name, {}))
+        metadata = profile.metadata[item.category]
+        if item.relative_path in metadata:
+            return metadata[item.relative_path]
+        collection_name = {"checkpoint": "checkpoints", "character": "characters", "lora": "loras"}[item.category]
+        same_stem = [asset for asset in getattr(profile, collection_name) if asset.name == item.name]
+        return metadata.get(item.name, {}) if len(same_stem) == 1 else {}
 
     def _apply_settings(self, workflow: dict, settings: dict) -> None:
         workflow_settings = settings.get("workflow", {})
