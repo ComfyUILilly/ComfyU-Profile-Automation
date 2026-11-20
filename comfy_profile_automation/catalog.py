@@ -60,10 +60,15 @@ class ProfileCatalog:
             root = root.parent
         if not root.exists():
             return []
+        relative_base = root
+        if category == "checkpoint" and root.name.lower() == profile.lower():
+            relative_base = root.parent
+        elif category in ("character", "lora") and root.parent.name.lower() == profile.lower():
+            relative_base = root.parent.parent
         items = []
         for path in sorted(root.rglob("*")):
             if path.is_file() and path.suffix.lower() in self.MODEL_SUFFIXES:
-                items.append(ModelFile(profile, category, path, path.relative_to(root).as_posix()))
+                items.append(ModelFile(profile, category, path, path.relative_to(relative_base).as_posix()))
         return items
 
     @staticmethod
