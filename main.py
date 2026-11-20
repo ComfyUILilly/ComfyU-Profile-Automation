@@ -164,6 +164,7 @@ def main() -> int:
                     save_path.write_text(json.dumps(workflow, ensure_ascii=False, indent=2), encoding="utf-8")
                 if args.dry_run:
                     continue
+                client.sync_model_names(workflow, gen.get("force_linux_path_nodes", []))
                 if gen.get("queue_prompt", True):
                     client.queue_prompt(workflow)
                 if gen.get("queue_prompt_wait", gen.get("wait_for_queue", True)):
