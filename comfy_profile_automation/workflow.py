@@ -31,7 +31,6 @@ class WorkflowBuilder:
         self._apply_checkpoint_sampler(workflow, checkpoint_metadata)
         self._attach_loras(workflow, loras, profile.name, checkpoint_metadata)
         self._randomize_seeds(workflow)
-        checkpoint_metadata = self._metadata(profile, checkpoint)
         character_metadata = self._metadata(profile, character) if character else profile.setup_wildcard.get("CharWildcard", {})
         lora_metadata = [self._metadata(profile, item) for item in loras]
         if not lora_metadata:
