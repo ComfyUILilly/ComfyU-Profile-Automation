@@ -24,6 +24,9 @@ profiles:
     from_img_path: ComfyUI/input/fromImg
 
 generation:
+  images_per_checkpoint: 1
+  images_per_character: 1
+  images_per_lora: 1
   lora_count: [1, 2]
   request_timeout: 30
   wait_for_queue: true
