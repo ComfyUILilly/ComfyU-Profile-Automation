@@ -47,6 +47,7 @@ class WorkflowBuilder:
         self._apply_character_defaults(workflow, profile, character)
         self._apply_lora_defaults(workflow, profile, loras)
         self._apply_prompt_metadata(workflow, profile, checkpoint, character, loras)
+        self._set_save_prefix(workflow, profile, checkpoint, character, loras)
         return self.wildcards.apply(workflow, profile.setup_wildcard, wildcard_sources,
                                     shuffle=profile.setup_wildcard.get("shuffleWildcard", False))
 
@@ -73,6 +74,7 @@ class WorkflowBuilder:
                 defaults = profile.setup_workflow.get("charDefault" if item.category == "character" else "loraDefault", {})
                 self._apply_strengths(node, self._metadata(profile, item), defaults)
         self._randomize_seeds(workflow)
+        self._set_save_prefix(workflow, profile, checkpoint, character, loras)
         for node_id in ("PrimitiveStringMultilineP", "PrimitiveStringMultilineN"):
             if node_id in workflow:
                 workflow[node_id].setdefault("inputs", {})["value"] = ""
@@ -169,7 +171,23 @@ class WorkflowBuilder:
     def _apply_node_metadata(workflow, metadata):
         for node_id, values in metadata.items():
             if node_id in workflow and isinstance(values, dict):
-                workflow[node_id].setdefault("inputs", {}).update(copy.deepcopy(values))
+                inputs = workflow[node_id].setdefault("inputs", {})
+                for key, value in values.items():
+                    inputs[key] = self._random_value(value)
+
+    @staticmethod
+    def _set_save_prefix(workflow, profile, checkpoint, character, loras):
+        from datetime import datetime
+        character_name = character.name if character else "wildcard"
+        lora_count = len(loras)
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        prefix = f"{profile.name}/{checkpoint.name}/{character_name}/{checkpoint.name}-{character_name}-{lora_count}-{timestamp}"
+        for node_id in ("SaveImage1", "SaveImage2", "SaveVideo"):
+            node = workflow.get(node_id)
+            if isinstance(node, dict):
+                node.setdefault("inputs", {})["filename_prefix"] = prefix
+        if profile.setup_workflow.get("noSaveImage1"):
+            workflow.pop("SaveImage1", None)
 
     def _apply_character_defaults(self, workflow, profile, character):
         node = workflow.get("LoraLoader", {})
