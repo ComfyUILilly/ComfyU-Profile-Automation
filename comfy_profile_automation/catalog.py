@@ -8,6 +8,16 @@ from typing import Any
 import yaml
 
 
+class LegacySafeLoader(yaml.SafeLoader):
+    pass
+
+
+LegacySafeLoader.add_constructor(
+    "tag:yaml.org,2002:python/tuple",
+    lambda loader, node: tuple(loader.construct_sequence(node)),
+)
+
+
 @dataclass(frozen=True)
 class ModelFile:
     profile: str
@@ -76,7 +86,7 @@ class ProfileCatalog:
         if not path.exists():
             return {}
         with path.open("r", encoding="utf-8-sig") as stream:
-            return yaml.safe_load(stream) or {}
+            return yaml.load(stream, Loader=LegacySafeLoader) or {}
 
     @staticmethod
     def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
