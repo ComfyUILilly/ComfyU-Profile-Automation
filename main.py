@@ -100,7 +100,8 @@ def main() -> int:
                         log.warning("No compatible PNG workflow for %s; falling back to Weight", profile_name)
                         checkpoint_mode = "Weight"
                     checkpoint = selector.choose(profile, "checkpoint", checkpoint_mode)[0]
-                    character = selector.choose(profile, "character", character_mode)[0] if profile.characters else None
+                    character = None if character_mode == "Wildcard" else (
+                        selector.choose(profile, "character", character_mode)[0] if profile.characters else None)
                     lora_count = _count(gen.get("lora_count", [1, 2]), rng)
                     loras = selector.choose(profile, "lora", lora_mode, lora_count)
                     workflow = builder.build(profile, checkpoint, character, loras)
