@@ -14,12 +14,12 @@ from comfy_profile_automation.database import UsageDatabase
 from comfy_profile_automation.workflow import WorkflowBuilder
 from comfy_profile_automation.comfy_api import ComfyUIClient
 from comfy_profile_automation.observer import ProfileObserver
+from comfy_profile_automation.from_image import FromImageWorkflow
 
 
 def _count(value, rng):
     if isinstance(value, (list, tuple)) and len(value) == 2:
-        low, high = int(value[0]), int(value[1])
-        return rng.randint(min(low, high), max(low, high))
+        return rng.randint(int(value[0]), int(value[1]))
     return max(1, int(value))
 
 
@@ -38,40 +38,34 @@ def main() -> int:
     data_path = Path(config["data_path"]).expanduser().resolve()
     manager = ProfileManager(config["profiles"], rng=rng)
     catalog = ProfileCatalog(data_path, config["profiles"], base_dir=Path(config.get("base_dir", ".")).resolve())
-    selector = AssetSelector(rng=rng)
+    databases = {name: UsageDatabase(data_path / name / "database") for name in config["profiles"]}
+    selector = AssetSelector(rng=rng, database=None)
     builder = WorkflowBuilder(rng=rng)
+    from_image = FromImageWorkflow(rng=rng)
     client = ComfyUIClient(**config["comfyui"], timeout=config["generation"].get("request_timeout", 30))
-    databases = {}
     observer = None
 
-    def reload_profile(profile_name, changed_path=None, event_type=None):
-        log.info("Profile data changed; refreshed on next batch: %s (%s)", profile_name, changed_path)
+    def on_profile_change(profile_name, path, event_type):
+        log.info("Profile %s file event: %s (%s); changes apply on next batch", profile_name, path, event_type)
 
     try:
         roots = {}
         for name, settings in config["profiles"].items():
             roots[name] = [data_path / name]
             for key in ("checkpoint_path", "character_path", "lora_path"):
-                path = Path(settings.get(key, ""))
-                if str(path):
-                    roots[name].append(path if path.is_absolute() else Path(config.get("base_dir", ".")) / path)
-            databases[name] = UsageDatabase(data_path / name / "database")
+                if settings.get(key):
+                    roots[name].append(Path(settings[key]))
         if config.get("observer", {}).get("enabled", True):
-            observer = ProfileObserver(roots, reload_profile)
+            observer = ProfileObserver(roots, on_profile_change)
             observer.start()
 
         while True:
             profile_name, batch_count = manager.next_batch()
             profile = catalog.load(profile_name)
+            selector.database = databases[profile_name]
             log.info("Profile selected: %s (%d images)", profile_name, batch_count)
-            if not profile.checkpoints:
-                log.warning("Profile %s has no checkpoint assets; skipping batch", profile_name)
-                if args.dry_run:
-                    return 2
-                time.sleep(2)
-                continue
-            if not profile.workflow_api:
-                log.error("Profile %s has no workflow_api.json content", profile_name)
+            if not profile.checkpoints or not profile.workflow_api:
+                log.warning("Profile %s has no checkpoint assets or workflow_api.json", profile_name)
                 if args.dry_run:
                     return 2
                 time.sleep(2)
@@ -79,15 +73,32 @@ def main() -> int:
 
             profile_cfg = config["profiles"][profile_name]
             gen = config["generation"]
+            checkpoint_mode = profile_cfg.get("checkpoint_kind", gen.get("checkpoint_kind", "Weight"))
+            from_img_mode = checkpoint_mode == "fromImg"
+            imported = None
+            if from_img_mode:
+                image_dir = Path(profile_cfg.get("from_img_path", gen.get("from_img_path", "")))
+                if not image_dir.is_absolute():
+                    image_dir = Path(config.get("base_dir", ".")) / image_dir
+                imported = from_image.load(profile, image_dir)
+                if imported is None:
+                    log.warning("No compatible PNG workflow found for profile %s; using regular selection", profile_name)
+                    from_img_mode = False
+
             for index in range(batch_count):
-                checkpoint_mode = profile_cfg.get("checkpoint_kind", gen.get("checkpoint_kind", "Weight"))
-                character_mode = profile_cfg.get("character_kind", gen.get("character_kind", "Weight"))
-                lora_mode = profile_cfg.get("lora_kind", gen.get("lora_kind", "Weight"))
-                checkpoint = selector.choose(profile, "checkpoint", checkpoint_mode)[0]
-                character = selector.choose(profile, "character", character_mode)[0] if profile.characters else None
-                lora_count = _count(gen.get("lora_count", [1, 2]), rng)
-                loras = selector.choose(profile, "lora", lora_mode, lora_count)
-                workflow = builder.build(profile, checkpoint, character, loras)
+                if from_img_mode and imported:
+                    prompt, checkpoint, character, loras = imported
+                    import copy
+                    workflow = copy.deepcopy(prompt)
+                else:
+                    character_mode = profile_cfg.get("character_kind", gen.get("character_kind", "Weight"))
+                    lora_mode = profile_cfg.get("lora_kind", gen.get("lora_kind", "Weight"))
+                    checkpoint = selector.choose(profile, "checkpoint", "Weight" if checkpoint_mode == "fromImg" else checkpoint_mode)[0]
+                    character = selector.choose(profile, "character", character_mode)[0] if profile.characters else None
+                    lora_count = _count(gen.get("lora_count", [1, 2]), rng)
+                    loras = selector.choose(profile, "lora", lora_mode, lora_count)
+                    workflow = builder.build(profile, checkpoint, character, loras)
+
                 log.info("[%s %d/%d] checkpoint=%s character=%s loras=%s",
                          profile_name, index + 1, batch_count, checkpoint.relative_path,
                          character.relative_path if character else "-",
