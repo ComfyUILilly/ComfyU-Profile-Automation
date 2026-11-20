@@ -74,6 +74,16 @@ class ProfileCatalog:
             return yaml.safe_load(stream) or {}
 
     @staticmethod
+    def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+        result = dict(base)
+        for key, value in override.items():
+            if isinstance(value, dict) and isinstance(result.get(key), dict):
+                result[key] = ProfileCatalog._deep_merge(result[key], value)
+            else:
+                result[key] = value
+        return result
+
+    @staticmethod
     def _merge_yaml_dir(path: Path) -> dict[str, Any]:
         merged = {}
         if path.exists():
@@ -106,9 +116,17 @@ class ProfileCatalog:
             "character": self._merge_yaml_dir(root / "lora" / "char"),
             "lora": self._merge_yaml_dir(root / "lora" / "etc"),
         }
+        setup_workflow = self._deep_merge(
+            self._yaml(self.data_path / "setupWorkflow.yml"),
+            self._yaml(root / "setupWorkflow.yml"),
+        )
+        setup_wildcard = self._deep_merge(
+            self._yaml(self.data_path / "setupWildcard.yml"),
+            self._yaml(root / "setupWildcard.yml"),
+        )
         return ProfileData(
             name=profile, root=root, checkpoints=checkpoints, characters=characters,
             loras=loras, weights=weights, metadata=metadata,
-            setup_workflow=self._yaml(root / "setupWorkflow.yml"),
-            setup_wildcard=self._yaml(root / "setupWildcard.yml"), workflow_api=workflow,
+            setup_workflow=setup_workflow, setup_wildcard=setup_wildcard,
+            workflow_api=workflow,
         )
