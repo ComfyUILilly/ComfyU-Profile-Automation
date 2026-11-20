@@ -13,6 +13,21 @@ from comfy_profile_automation.workflow import WorkflowBuilder
 from comfy_profile_automation.comfy_api import ComfyUIClient
 
 
+def _weighted_pick(items, weights: dict, rng: random.Random):
+    if not items:
+        raise ValueError("Cannot select from an empty asset list")
+    values = []
+    for item in items:
+        weight = weights.get(item.relative_path, weights.get(item.name, 1))
+        try:
+            values.append(max(0.0, float(weight)))
+        except (TypeError, ValueError):
+            values.append(1.0)
+    if not any(values):
+        return rng.choice(items)
+    return rng.choices(items, weights=values, k=1)[0]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="ComfyUI profile automation")
     parser.add_argument("--config", default="config.yml")
@@ -44,8 +59,9 @@ def main() -> int:
             time.sleep(1)
             continue
         for index in range(batch_count):
-            checkpoint = rng.choice(profile.checkpoints)
-            character = rng.choice(profile.characters) if profile.characters else None
+            checkpoint = _weighted_pick(profile.checkpoints, profile.weights["checkpoint"], rng)
+            character = (_weighted_pick(profile.characters, profile.weights["character"], rng)
+                         if profile.characters else None)
             low, high = config["generation"].get("lora_count", [1, 2])
             count = rng.randint(int(low), int(high))
             loras = rng.sample(profile.loras, min(len(profile.loras), count)) if profile.loras else []
