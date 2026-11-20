@@ -25,7 +25,8 @@ def main() -> int:
     )
     rng = random.Random()
     manager = ProfileManager(config["profiles"], rng=rng)
-    catalog = ProfileCatalog(Path(config["data_path"]), config["profiles"])
+    catalog = ProfileCatalog(Path(config["data_path"]), config["profiles"],
+                             base_dir=Path(config.get("base_dir", ".")))
     builder = WorkflowBuilder()
     client = ComfyUIClient(**config["comfyui"], timeout=config["generation"].get("request_timeout", 30))
     log = logging.getLogger("automation")
@@ -38,10 +39,16 @@ def main() -> int:
             log.warning("Profile %s has no checkpoint files; skipping batch", profile_name)
             time.sleep(1)
             continue
+        if not profile.workflow_api:
+            log.error("No workflow_api.json found for profile %s; skipping batch", profile_name)
+            time.sleep(1)
+            continue
         for index in range(batch_count):
             checkpoint = rng.choice(profile.checkpoints)
             character = rng.choice(profile.characters) if profile.characters else None
-            loras = rng.sample(profile.loras, min(len(profile.loras), rng.randint(*config["generation"]["lora_count"]))) if profile.loras else []
+            low, high = config["generation"].get("lora_count", [1, 2])
+            count = rng.randint(int(low), int(high))
+            loras = rng.sample(profile.loras, min(len(profile.loras), count)) if profile.loras else []
             workflow = builder.build(profile, checkpoint, character, loras)
             log.info("[%s %d/%d] checkpoint=%s character=%s loras=%s",
                      profile_name, index + 1, batch_count, checkpoint.relative_path,
