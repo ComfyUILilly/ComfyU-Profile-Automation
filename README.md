@@ -20,7 +20,15 @@ python -m pip install -r requirements.txt
 python main.py --config config.yml
 ```
 
-Windows에서는 `run.bat`를 실행할 수 있습니다. 최초 실행 전 `config.example.yml`을 `config.yml`로 복사하세요.
+Windows에서는 `run.bat`를 실행할 수 있습니다. 최초 실행 전 `config.example.yml`을 `config.yml`로 복사하고 실제 ComfyUI 경로를 확인하세요.
+
+데이터 폴더의 기본 구조는 아래 명령으로 만들 수 있습니다.
+
+```bash
+python scripts/init_data.py
+```
+
+이 명령은 IL/Anime별 YAML 파일과 빈 `workflow_api.json`을 생성합니다. 각 프로필의 실제 API 워크플로우 JSON은 직접 복사해 넣어야 합니다. 모델 파일은 `config.yml`의 `checkpoint_path`, `character_path`, `lora_path`가 가리키는 ComfyUI 모델 폴더에서 읽습니다.
 
 ## 데이터 폴더
 
