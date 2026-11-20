@@ -48,6 +48,15 @@ class WildcardEngine:
                 break
         return result
 
+    @staticmethod
+    def _flatten_section(container, section):
+        value = container.get(section, {}) if isinstance(container, dict) else {}
+        if isinstance(value, dict):
+            return [str(item) for item in value.values() if isinstance(item, str) and item]
+        if isinstance(value, str) and value:
+            return [value]
+        return []
+
     def apply(self, workflow: dict, profile_wildcards: dict[str, Any],
               metadata: list[dict[str, Any]] | None = None) -> dict:
         definitions = {}
@@ -58,15 +67,11 @@ class WildcardEngine:
         prompt_parts = {"positive": [], "negative": []}
         for source in metadata or []:
             for section in prompt_parts:
-                values = source.get(section, {})
-                if isinstance(values, dict):
-                    prompt_parts[section].extend(str(v) for v in values.values() if v)
-                elif isinstance(values, str) and values:
-                    prompt_parts[section].append(values)
+                prompt_parts[section].extend(self._flatten_section(source, section))
         for section in prompt_parts:
-            values = profile_wildcards.get(section, {}) or {}
-            if isinstance(values, dict):
-                prompt_parts[section].extend(str(v) for v in values.values() if isinstance(v, str) and v)
+            prompt_parts[section].extend(self._flatten_section(profile_wildcards, section))
+            for wildcard_key in ("CharWildcard", "LoraWildcard"):
+                prompt_parts[section].extend(self._flatten_section(profile_wildcards.get(wildcard_key, {}), section))
         for node_id, node in workflow.items():
             if not isinstance(node, dict):
                 continue
