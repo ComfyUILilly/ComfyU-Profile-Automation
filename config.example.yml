@@ -8,22 +8,33 @@ profiles:
     checkpoint_path: ComfyUI/models/checkpoints/IL
     character_path: ComfyUI/models/loras/IL/char
     lora_path: ComfyUI/models/loras/IL/etc
-    workflow_file: workflow_api.json
+    checkpoint_kind: {Weight: 4, Random: 1, DB: 1, Cycle: 1, Favorites: 1, Skip: 1, fromImg: 0}
+    character_kind: {Weight: 4, Random: 1, DB: 1, Cycle: 1, Favorites: 1, Skip: 1, Wildcard: 1}
+    lora_kind: {Weight: 4, Random: 1, DB: 1, Cycle: 1, Wildcard: 1}
+    from_img_path: ComfyUI/input/fromImg
   Anime:
     weight: 1
     batch_images: [5, 10]
     checkpoint_path: ComfyUI/models/diffusion_models/Anime
     character_path: ComfyUI/models/loras/Anime/char
     lora_path: ComfyUI/models/loras/Anime/etc
-    workflow_file: workflow_api.json
+    checkpoint_kind: {Weight: 4, Random: 1, DB: 1, Cycle: 1, Favorites: 1, Skip: 1, fromImg: 0}
+    character_kind: {Weight: 4, Random: 1, DB: 1, Cycle: 1, Favorites: 1, Skip: 1, Wildcard: 1}
+    lora_kind: {Weight: 4, Random: 1, DB: 1, Cycle: 1, Wildcard: 1}
+    from_img_path: ComfyUI/input/fromImg
 
 generation:
-  images_per_checkpoint: 5
-  images_per_character: 4
   lora_count: [1, 2]
   request_timeout: 30
   wait_for_queue: true
   poll_interval: 1
+  max_queue_wait: null
+  sleep_seconds: 0
+  xlsx_export_interval: 0
+  export_xlsx_on_exit: true
+
+observer:
+  enabled: true
 
 comfyui:
   prompt_url: http://127.0.0.1:8188/prompt
