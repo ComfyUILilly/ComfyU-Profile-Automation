@@ -79,7 +79,13 @@ class AssetSelector:
                    for group in profile.weights.get("lora", {}).values())
 
     def _choose_group_loras(self, profile, candidates):
-        by_name = {item.name: item for item in candidates}
+        by_identity = {item.identity: item for item in candidates}
+        by_relative = {item.relative_path: item for item in candidates}
+        stem_groups = {}
+        for item in candidates:
+            stem_groups.setdefault(item.name, []).append(item)
+        by_unique_stem = {name: values[0] for name, values in stem_groups.items() if len(values) == 1}
+        aliases = {**by_unique_stem, **by_relative, **by_identity}
         selected = {}
         for group_name, group in profile.weights.get("lora", {}).items():
             if not isinstance(group, dict):
@@ -102,8 +108,8 @@ class AssetSelector:
                         chance = 0
                     if self.rng.random() < chance:
                         for name in self._resolve_group_names(group_name, key, entry):
-                            if name in by_name:
-                                pool[name] = entry
+                            if name in aliases:
+                                pool[aliases[name].identity] = entry
             if group.get("weight"):
                 limit = self._random_count(group.get("weightMax", 0))
                 weighted_entries = []
@@ -120,15 +126,16 @@ class AssetSelector:
                     k=min(limit, len(weighted_entries))
                 ) if weighted_entries and limit else []:
                     for name in self._resolve_group_names(group_name, key, entry):
-                        if name in by_name:
-                            pool[name] = entry
+                        if name in aliases:
+                            pool[aliases[name].identity] = entry
             chosen = list(pool)
             if group.get("total"):
                 chosen = self.rng.sample(chosen, min(total_max, len(chosen)))
             selected.update({name: by_name[name] for name in chosen})
         if not selected:
             return self._weighted_sample(candidates, profile.weights.get("lora", {}), min(1, len(candidates)))
-        return list(selected.values())
+        return [next(item for item in candidates if item.identity == identity)
+                for identity in selected]
 
     def _resolve_group_names(self, group, key, entry):
         values = entry.get("loras")
