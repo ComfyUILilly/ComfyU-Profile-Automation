@@ -19,6 +19,10 @@ class ModelFile:
     def name(self) -> str:
         return self.path.stem
 
+    @property
+    def identity(self) -> str:
+        return f"{self.profile}/{self.category}/{self.relative_path}"
+
 
 @dataclass
 class ProfileData:
@@ -31,10 +35,11 @@ class ProfileData:
     setup_workflow: dict[str, Any] = field(default_factory=dict)
     setup_wildcard: dict[str, Any] = field(default_factory=dict)
     workflow_api: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class ProfileCatalog:
-    """Load one profile's YAML data and model files without crossing profiles."""
+    """Load one profile's model roots and profile-owned configuration files."""
 
     MODEL_SUFFIXES = {".safetensors", ".ckpt", ".pt", ".pth"}
 
@@ -56,8 +61,7 @@ class ProfileCatalog:
         items = []
         for path in sorted(root.rglob("*")):
             if path.is_file() and path.suffix.lower() in self.MODEL_SUFFIXES:
-                relative = path.relative_to(root).as_posix()
-                items.append(ModelFile(profile, category, path, relative))
+                items.append(ModelFile(profile, category, path, path.relative_to(root).as_posix()))
         return items
 
     @staticmethod
@@ -66,6 +70,16 @@ class ProfileCatalog:
             return {}
         with path.open("r", encoding="utf-8-sig") as stream:
             return yaml.safe_load(stream) or {}
+
+    @staticmethod
+    def _merge_yaml_dir(path: Path) -> dict[str, Any]:
+        merged = {}
+        if path.exists():
+            for file in sorted(path.glob("*.yml")):
+                data = ProfileCatalog._yaml(file)
+                if isinstance(data, dict):
+                    merged.update(data)
+        return merged
 
     def load(self, profile: str) -> ProfileData:
         if profile not in self.profile_names:
@@ -76,7 +90,7 @@ class ProfileCatalog:
         characters = self._scan(profile, "character", "lora/char")
         loras = self._scan(profile, "lora", "lora/etc")
         workflow_path = root / settings.get("workflow_file", "workflow_api.json")
-        workflow: dict[str, Any] = {}
+        workflow = {}
         if workflow_path.exists():
             with workflow_path.open("r", encoding="utf-8-sig") as stream:
                 workflow = json.load(stream)
@@ -85,10 +99,14 @@ class ProfileCatalog:
             "character": self._yaml(root / "WeightChar.yml"),
             "lora": self._yaml(root / "WeightLora.yml"),
         }
+        metadata = {
+            "checkpoint": self._merge_yaml_dir(root / "checkpoint"),
+            "character": self._merge_yaml_dir(root / "lora" / "char"),
+            "lora": self._merge_yaml_dir(root / "lora" / "etc"),
+        }
         return ProfileData(
             name=profile, root=root, checkpoints=checkpoints, characters=characters,
-            loras=loras, weights=weights,
+            loras=loras, weights=weights, metadata=metadata,
             setup_workflow=self._yaml(root / "setupWorkflow.yml"),
-            setup_wildcard=self._yaml(root / "setupWildcard.yml"),
-            workflow_api=workflow,
+            setup_wildcard=self._yaml(root / "setupWildcard.yml"), workflow_api=workflow,
         )
