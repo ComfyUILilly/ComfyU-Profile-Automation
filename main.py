@@ -169,10 +169,20 @@ def main() -> int:
                 if gen.get("queue_prompt_wait", gen.get("wait_for_queue", True)):
                     client.wait_until_idle(poll_interval=gen.get("poll_interval", 1),
                                            max_wait=gen.get("max_queue_wait"))
+                used_assets = [*([character] if character else []), *loras]
+                tags = []
+                for item in used_assets:
+                    source = profile.metadata[item.category]
+                    metadata = source.get(item.relative_path, source.get(item.name, {}))
+                    raw_tags = metadata.get("tag", []) if isinstance(metadata, dict) else []
+                    if isinstance(raw_tags, str):
+                        tags.append(raw_tags)
+                    elif isinstance(raw_tags, list):
+                        tags.extend(raw_tags)
                 databases[profile_name].record(
                     profile_name, checkpoint.relative_path,
                     character.relative_path if character else None,
-                    [item.relative_path for item in loras],
+                    [item.relative_path for item in loras], tags=tags,
                 )
                 interval = int(gen.get("xlsx_export_interval", 0))
                 if interval and (index + 1) % interval == 0:
