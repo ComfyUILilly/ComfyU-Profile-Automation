@@ -25,12 +25,15 @@ class FromImageWorkflow:
             prompt = self._read_prompt(image_path)
             if not prompt:
                 continue
-            checkpoint = self._resolve_checkpoint(profile, prompt)
+            checkpoint_node, checkpoint_key, checkpoint = self._resolve_checkpoint(profile, prompt)
             if not checkpoint:
                 continue
-            character, loras = self._resolve_loras(profile, prompt)
+            character, loras, lora_nodes = self._resolve_loras(profile, prompt)
             if loras is None:
                 continue
+            prompt[checkpoint_node].setdefault("inputs", {})[checkpoint_key] = checkpoint.relative_path
+            for node_id, item in lora_nodes:
+                prompt[node_id].setdefault("inputs", {})["lora_name"] = item.relative_path
             return prompt, checkpoint, character, loras
         return None
 
@@ -50,29 +53,33 @@ class FromImageWorkflow:
         if not node_id:
             node_id = "CheckpointLoaderSimple" if "CheckpointLoaderSimple" in prompt else "UNETLoader" if "UNETLoader" in prompt else None
         if not node_id:
-            return None
+            return None, None, None
         key = "unet_name" if node_id == "UNETLoader" else "ckpt_name"
         value = prompt.get(node_id, {}).get("inputs", {}).get(key)
         filename = Path(str(value or "").replace("\\", "/")).name
         stem = Path(filename).stem
-        return next((item for item in profile.checkpoints if item.name == stem or item.path.name == filename), None)
+        item = next((x for x in profile.checkpoints if x.name == stem or x.path.name == filename), None)
+        return node_id, key, item
 
     @staticmethod
     def _resolve_loras(profile, prompt):
-        available = {item.path.name: item for item in profile.characters + profile.loras}
-        character, loras = None, []
-        for node in prompt.values():
+        available = profile.characters + profile.loras
+        character, loras, nodes = None, [], []
+        for node_id, node in prompt.items():
             if not isinstance(node, dict) or not str(node.get("class_type", "")).startswith("LoraLoader"):
                 continue
             value = node.get("inputs", {}).get("lora_name")
             if not value:
                 continue
             filename = Path(str(value).replace("\\", "/")).name
-            item = available.get(filename) or next((x for x in available.values() if x.name == Path(filename).stem), None)
+            item = next((x for x in available if x.path.name == filename), None)
             if item is None:
-                return None, None
+                item = next((x for x in available if x.name == Path(filename).stem), None)
+            if item is None:
+                return None, None, None
+            nodes.append((node_id, item))
             if item.category == "character" and character is None:
                 character = item
             elif item.category == "lora":
                 loras.append(item)
-        return character, loras
+        return character, loras, nodes
