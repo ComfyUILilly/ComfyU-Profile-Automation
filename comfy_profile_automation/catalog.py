@@ -111,7 +111,8 @@ class ProfileCatalog:
     @staticmethod
     def _load_asset_metadata(path: Path, models: list[ModelFile]) -> dict[str, Any]:
         merged = {}
-        for file in sorted(path.rglob("*.yml")) if path.exists() else []:
+        files = sorted(path.rglob("*.yml")) if path.exists() else []
+        for file in files:
             data = ProfileCatalog._yaml(file)
             if not isinstance(data, dict):
                 continue
