@@ -65,9 +65,8 @@ class ProfileCatalog:
             raise KeyError(f"Unknown profile: {profile}")
         root = self.data_path / profile
         checkpoints = self._scan(profile, "checkpoint", "checkpoint")
-        # Character LoRAs live under lora/char; all LoRAs remain in the profile's lora tree.
         characters = self._scan(profile, "character", "lora/char")
-        loras = self._scan(profile, "lora", "lora")
+        loras = self._scan(profile, "lora", "lora/etc")
         workflow_path = root / "workflow_api.json"
         workflow: dict[str, Any] = {}
         if workflow_path.exists():
