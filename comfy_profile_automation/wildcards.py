@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 import re
+import yaml
 from typing import Any
 
 
@@ -9,7 +10,7 @@ _TOKEN = re.compile(r"__([A-Za-z0-9_.-]+)__")
 
 
 class WildcardEngine:
-    """Expand nested weighted wildcard tokens using only active-profile definitions."""
+    """Compose ordered positive/negative wildcard dictionaries and expand nested tokens."""
 
     def __init__(self, rng: random.Random | None = None):
         self.rng = rng or random.Random()
@@ -49,38 +50,56 @@ class WildcardEngine:
         return result
 
     @staticmethod
-    def _flatten_section(container, section):
-        value = container.get(section, {}) if isinstance(container, dict) else {}
-        if isinstance(value, dict):
-            return [str(item) for item in value.values() if isinstance(item, str) and item]
-        if isinstance(value, str) and value:
-            return [value]
-        return []
+    def _merge(target: dict, source: Any) -> None:
+        if not isinstance(source, dict):
+            return
+        for section in ("positive", "negative"):
+            values = source.get(section, {})
+            if isinstance(values, dict):
+                target[section].update(values)
+            elif isinstance(values, str) and values:
+                target[section][f"item{len(target[section]) + 1}"] = values
 
     def apply(self, workflow: dict, profile_wildcards: dict[str, Any],
-              metadata: list[dict[str, Any]] | None = None) -> dict:
+              metadata: list[dict[str, Any]] | None = None, shuffle: Any = False) -> dict:
+        prompts = {"positive": {}, "negative": {}}
+        self._merge(prompts, profile_wildcards)
+        for source in metadata or []:
+            self._merge(prompts, source)
+
         definitions = {}
         for section in ("positive", "negative", "CharWildcard", "LoraWildcard", "wildcards"):
             values = profile_wildcards.get(section, {}) or {}
             if isinstance(values, dict):
                 definitions.update(values)
-        prompt_parts = {"positive": [], "negative": []}
-        for source in metadata or []:
-            for section in prompt_parts:
-                prompt_parts[section].extend(self._flatten_section(source, section))
-        for section in prompt_parts:
-            prompt_parts[section].extend(self._flatten_section(profile_wildcards, section))
-            for wildcard_key in ("CharWildcard", "LoraWildcard"):
-                prompt_parts[section].extend(self._flatten_section(profile_wildcards.get(wildcard_key, {}), section))
-        for node_id, node in workflow.items():
+
+        for section, suffix in (("positive", "P"), ("negative", "N")):
+            values = list(prompts[section].values())
+            if isinstance(shuffle, (list, tuple)) and len(shuffle) == 2:
+                should_shuffle = bool(self._pick(shuffle))
+            else:
+                should_shuffle = bool(shuffle)
+            if should_shuffle:
+                self.rng.shuffle(values)
+            yaml_node = workflow.get(f"PrimitiveStringMultiline{suffix}")
+            if isinstance(yaml_node, dict):
+                yaml_node.setdefault("inputs", {})["value"] = yaml.safe_dump(
+                    prompts[section], allow_unicode=True, sort_keys=False
+                )
+            wildcard_node = workflow.get(f"{section}Wildcard")
+            if isinstance(wildcard_node, dict) and "wildcard_text" in wildcard_node.get("inputs", {}):
+                wildcard_node["inputs"]["wildcard_text"] = f",,,,{','.join(str(v) for v in values)},,,,"
+            else:
+                target_id = "CLIPTextEncodeN" if section == "negative" else "CLIPTextEncodeP"
+                target = workflow.get(target_id)
+                if isinstance(target, dict) and "text" in target.get("inputs", {}) and values:
+                    original = target["inputs"]["text"]
+                    target["inputs"]["text"] = ", ".join([original, *map(str, values)]).strip(", ")
+
+        for node in workflow.values():
             if not isinstance(node, dict):
                 continue
             inputs = node.get("inputs", {})
-            if not isinstance(inputs, dict) or not isinstance(inputs.get("text"), str):
-                continue
-            section = "negative" if node_id.endswith("N") or "negative" in node_id.lower() else "positive"
-            text_value = inputs["text"]
-            if prompt_parts[section]:
-                text_value = ", ".join([text_value, *prompt_parts[section]]).strip(", ")
-            inputs["text"] = self.expand(text_value, definitions)
+            if isinstance(inputs, dict) and isinstance(inputs.get("text"), str):
+                inputs["text"] = self.expand(inputs["text"], definitions)
         return workflow
