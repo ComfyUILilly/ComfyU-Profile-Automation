@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any\n\nfrom tinydb import Query
 
 
 class UsageDatabase:
@@ -27,7 +27,7 @@ class UsageDatabase:
         }.items():
             table = self._table(profile, category)
             for value in values:
-                row = table.get(doc_id=None) if False else table.get(__import__("tinydb").Query().asset == value)
+                row = table.get(Query().asset == value)
                 if row:
                     table.update({"count": int(row.get("count", 0)) + 1}, doc_ids=[row.doc_id])
                 else:
