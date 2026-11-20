@@ -4,6 +4,7 @@ import argparse
 import logging
 import random
 import time
+import json
 from pathlib import Path
 
 from comfy_profile_automation.config import load_config
@@ -153,6 +154,14 @@ def main() -> int:
                 checkpoint_remaining -= 1
                 character_remaining -= 1
                 lora_remaining -= 1
+                if gen.get("print_workflow", False):
+                    log.info("Workflow: %s", json.dumps(workflow, ensure_ascii=False))
+                if gen.get("save_workflow", False):
+                    log_dir = Path("log")
+                    log_dir.mkdir(parents=True, exist_ok=True)
+                    stamp = time.strftime("%Y%m%d-%H%M%S")
+                    save_path = log_dir / f"{profile_name}-{checkpoint.name}-{index + 1}-{stamp}.json"
+                    save_path.write_text(json.dumps(workflow, ensure_ascii=False, indent=2), encoding="utf-8")
                 if args.dry_run:
                     continue
                 if gen.get("queue_prompt", True):
