@@ -16,7 +16,7 @@ class WorkflowBuilder:
         self.wildcards = WildcardEngine(self.rng)
 
     def build(self, profile: ProfileData, checkpoint: ModelFile,
-              character: ModelFile | None, loras: list[ModelFile]) -> dict[str, Any]:
+              character: ModelFile | None, loras: list[ModelFile], weight_metadata: list[dict] | None = None) -> dict[str, Any]:
         assets = [checkpoint, *([character] if character else []), *loras]
         if any(item.profile != profile.name for item in assets):
             raise ValueError("Cross-profile assets are not allowed")
@@ -35,6 +35,7 @@ class WorkflowBuilder:
         if character:
             metadata.append(self._metadata(profile, character))
         metadata.extend(self._metadata(profile, item) for item in loras)
+        metadata.extend(weight_metadata or [])
         for item in assets:
             self._apply_node_metadata(workflow, self._metadata(profile, item))
         self._apply_character_defaults(workflow, profile, character)
@@ -50,6 +51,25 @@ class WorkflowBuilder:
         collection_name = {"checkpoint": "checkpoints", "character": "characters", "lora": "loras"}[item.category]
         same_stem = [asset for asset in getattr(profile, collection_name) if asset.name == item.name]
         return metadata.get(item.name, {}) if len(same_stem) == 1 else {}
+
+    def prepare_from_image(self, profile, prompt, checkpoint, character, loras):
+        workflow = copy.deepcopy(prompt)
+        metadata = [self._metadata(profile, checkpoint)]
+        if character:
+            metadata.append(self._metadata(profile, character))
+        metadata.extend(self._metadata(profile, item) for item in loras)
+        assets = [*([character] if character else []), *loras]
+        for node in workflow.values():
+            if not isinstance(node, dict) or not str(node.get("class_type", "")).startswith("LoraLoader"):
+                continue
+            filename = str(node.get("inputs", {}).get("lora_name", ""))
+            stem = filename.replace("\\\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0]
+            item = next((asset for asset in assets if asset.name == stem), None)
+            if item:
+                defaults = profile.setup_workflow.get("charDefault" if item.category == "character" else "loraDefault", {})
+                self._apply_strengths(node, self._metadata(profile, item), defaults)
+        self._randomize_seeds(workflow)
+        return self.wildcards.apply(workflow, profile.setup_wildcard, metadata)
 
     def _apply_settings(self, workflow: dict, settings: dict) -> None:
         workflow_settings = settings.get("workflow", {})
