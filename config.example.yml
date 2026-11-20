@@ -1,0 +1,30 @@
+data_path: ../ComfyU-auto-script_data
+
+profiles:
+  IL:
+    weight: 1
+    batch_images: [5, 10]
+    checkpoint_path: ComfyUI/models/checkpoints/IL
+    lora_path: ComfyUI/models/loras/IL
+    workflow_file: workflow_api.json
+  Anime:
+    weight: 1
+    batch_images: [5, 10]
+    checkpoint_path: ComfyUI/models/diffusion_models/Anime
+    lora_path: ComfyUI/models/loras/Anime
+    workflow_file: workflow_api.json
+
+generation:
+  images_per_checkpoint: 5
+  images_per_character: 4
+  lora_count: [1, 2]
+  request_timeout: 30
+  wait_for_queue: true
+  poll_interval: 1
+
+comfyui:
+  prompt_url: http://127.0.0.1:8188/prompt
+  queue_url: http://127.0.0.1:8188/queue
+
+logging:
+  level: INFO
