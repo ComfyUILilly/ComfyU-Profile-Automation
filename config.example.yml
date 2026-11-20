@@ -29,8 +29,12 @@ generation:
   images_per_lora: 1
   lora_count: [1, 2]
   request_timeout: 30
+  queue_prompt: true
+  queue_prompt_wait: true
   wait_for_queue: true
   poll_interval: 1
+  print_workflow: false
+  save_workflow: false
   max_queue_wait: null
   sleep_seconds: 0
   xlsx_export_interval: 0
