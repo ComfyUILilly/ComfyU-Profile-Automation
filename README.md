@@ -14,7 +14,7 @@
 
 ## 지원 기능
 
-- Checkpoint / Character / LoRA의 Weight, Random, DB, Cycle, Favorites, Skip 선택
+- Checkpoint / Character / LoRA의 Weight, Random, DB, Cycle, Favorites, Skip 선택 및 반복 생성 주기
 - LoRA 그룹별 `WeightLora.yml`의 per / weight / total / limit 설정
 - Anime의 `UNETLoader`, IL의 `CheckpointLoaderSimple` 우선 처리
 - 프로필별 `setupWorkflow.yml`, `setupWildcard.yml`, 자산별 YAML 설정
@@ -70,6 +70,10 @@ ComfyU-auto-script_data/
 ```
 
 각 프로필의 실제 API 형식 `workflow_api.json`과 YAML 설정은 기존 프로젝트의 파일을 해당 프로필 폴더로 옮겨서 사용합니다. `fromImg`를 사용하려면 프로필의 `from_img_path`에 PNG 결과 이미지가 들어 있는 폴더를 지정해야 합니다.
+
+## 반복 생성 주기
+
+`generation.images_per_checkpoint`, `images_per_character`, `images_per_lora`로 각각의 선택 결과를 몇 장 동안 유지할지 설정합니다. 기존 설정의 `CheckpointLoop`, `CharLoop`, `queueLoop` 키도 호환되며, 이 경우 기존 카운터 방식에 맞춰 지정값보다 1회 더 반복합니다.
 
 ## 선택 모드 설정
 
