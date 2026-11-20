@@ -154,4 +154,4 @@ class WorkflowBuilder:
             if character:
                 lines.append(f"Character: {character.relative_path}")
             lines.extend(f"LoRA: {item.relative_path}" for item in loras)
-            info.setdefault("inputs", {})["value"] = "\\n".join(lines) + "\\n"
+            info.setdefault("inputs", {})["value"] = "\n".join(lines) + "\n"
