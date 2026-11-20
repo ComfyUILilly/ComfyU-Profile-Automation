@@ -81,7 +81,13 @@ class FromImageWorkflow:
                 return None, None, None
             nodes.append((node_id, item))
             if item.category == "character" and character is None:
-                character = item
+                inputs = node.get("inputs", {})
+                try:
+                    disabled = float(inputs.get("strength_model", 1)) == 0.0 or float(inputs.get("strength_clip", 1)) == 0.0
+                except (TypeError, ValueError):
+                    disabled = False
+                if not disabled:
+                    character = item
             elif item.category == "lora":
                 loras.append(item)
         return character, loras, nodes
