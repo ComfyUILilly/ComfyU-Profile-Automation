@@ -39,7 +39,7 @@ python scripts/init_data.py
 python main.py --config config.yml
 ```
 
-일괄 테스트 전 워크플로우와 모델 경로를 확인하고 싶으면 `--dry-run`을 사용할 수 있습니다. dry-run은 프로필 한 배치의 프롬프트 구성을 출력하고 ComfyUI에 전송하지 않습니다.
+전체 구현 후 실제 생성 전에 경로와 선택 흐름을 확인하려면 `--dry-run`을 사용할 수 있습니다. ComfyUI로 전송하지 않으며, 전체 Workflow JSON을 로그로 보려면 `generation.print_workflow: true`로 설정합니다.
 
 ## 데이터 구조
 
