@@ -39,7 +39,25 @@ python scripts/init_data.py
 python main.py --config config.yml
 ```
 
-전체 구현 후 실제 생성 전에 경로와 선택 흐름을 확인하려면 `--dry-run`을 사용할 수 있습니다. ComfyUI로 전송하지 않으며, 전체 Workflow JSON을 로그로 보려면 `generation.print_workflow: true`로 설정합니다.
+Windows의 ComfyUI portable embedded Python을 사용하는 경우 프로젝트의 `run.bat`을 실행합니다. 실행기는 프로젝트 루트와 패키지 폴더를 확인하고 `PYTHONPATH`를 설정합니다.
+
+`ModuleNotFoundError: No module named 'comfy_profile_automation'`가 발생하면 다음 파일이 반드시 존재하는지 확인합니다.
+
+```text
+ComfyU-Profile-Automation/
+├── main.py
+└── comfy_profile_automation/
+    ├── __init__.py
+    └── config.py
+```
+
+GitHub에서 `main.py`만 따로 받으면 안 됩니다. 저장소 전체를 clone 또는 ZIP으로 받아야 합니다. 명령줄에서 확인하려면 프로젝트 루트에서 다음을 실행합니다.
+
+```bash
+python -c "import comfy_profile_automation; print(comfy_profile_automation.__file__)"
+```
+
+실제 생성 전에 경로와 선택 흐름을 확인하려면 `--dry-run`을 사용할 수 있습니다. ComfyUI로 전송하지 않으며, 이 모드는 서버 모델 목록 동기화나 API 연결까지 검사하지는 않습니다. 전체 Workflow JSON을 로그로 보려면 `generation.print_workflow: true`로 설정합니다.
 
 ## 데이터 구조
 
@@ -79,7 +97,7 @@ ComfyU-auto-script_data/
 
 `checkpoint_kind`, `character_kind`, `lora_kind`는 문자열 하나 또는 가중치 딕셔너리로 지정할 수 있습니다. 예: `{Weight: 4, Random: 1, DB: 1, Cycle: 1}`.
 
-`Favorites` / `Skip` 모드는 각 자산 YAML의 `favorites` / `skip` 값으로 후보를 필터링합니다. `WeightLora.yml`은 기존 그룹형 구조(`per`, `weight`, `total`, `*Max`, `dic`)를 사용합니다.
+`Favorites` / `Skip` 모드는 해당 선택 모드에서만 각 자산 YAML의 `favorites` / `skip` 값으로 후보를 고릅니다. `skip: true`를 모든 선택 모드에서 제외하는 전역 필터로 사용하지 않습니다. 따라서 자동 추출 직후 `skip: true`인 자산도 기존 선택 모드(예: Weight 또는 Random)에서는 선택 대상에 남고, 사용자가 검토한 뒤 값을 변경하면 Skip 모드의 후보군이 달라집니다. `Skip_Weight`는 skip 플래그가 있는 후보 안에서 가중치를 적용합니다. `WeightLora.yml`은 기존 그룹형 구조(`per`, `weight`, `total`, `*Max`, `dic`)를 사용합니다.
 
 ## 참고
 
