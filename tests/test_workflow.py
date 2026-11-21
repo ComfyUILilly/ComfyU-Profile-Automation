@@ -7,6 +7,16 @@ from comfy_profile_automation.wildcards import WildcardEngine
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_from_image_workflow_does_not_require_profile_template(self):
+        profile = ProfileData(name="IL", root=Path("."), workflow_api={})
+        checkpoint = ModelFile("IL", "checkpoint", Path("base.safetensors"), "IL/base.safetensors")
+        prompt = {"CheckpointLoaderSimple": {"inputs": {"ckpt_name": "old.safetensors"}}}
+        result = WorkflowBuilder().prepare_from_image(profile, prompt, checkpoint, None, [])
+        self.assertEqual(
+            result["CheckpointLoaderSimple"]["inputs"]["ckpt_name"],
+            "old.safetensors",
+        )
+
     def test_cross_profile_assets_are_rejected(self):
         profile = ProfileData(name="IL", root=Path("."),
                               workflow_api={"1": {"inputs": {}}})
