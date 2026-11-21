@@ -5,7 +5,15 @@ import logging
 import random
 import time
 import json
+import sys
 from pathlib import Path
+
+# Keep the project root importable even when running with an embedded Python
+# distribution (whose sys.path may be controlled by a ._pth file).
+PROJECT_ROOT = Path(__file__).resolve().parent
+project_root_text = str(PROJECT_ROOT)
+if project_root_text not in sys.path:
+    sys.path.insert(0, project_root_text)
 
 from comfy_profile_automation.config import load_config
 from comfy_profile_automation.profiles import ProfileManager
@@ -42,7 +50,7 @@ def _span(generation, modern_key, legacy_key, default, rng):
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="ComfyUI profile automation")
-    parser.add_argument("--config", default="config.yml")
+    parser.add_argument("--config", default=str(PROJECT_ROOT / "config.yml"))
     parser.add_argument("--dry-run", action="store_true", help="Prepare one profile batch without sending")
     args = parser.parse_args()
     config = load_config(args.config)
@@ -54,9 +62,13 @@ def main() -> int:
     rng = random.Random()
     data_path = Path(config["data_path"]).expanduser().resolve()
     manager = ProfileManager(config["profiles"], rng=rng)
-    catalog = ProfileCatalog(data_path, config["profiles"], base_dir=Path(config.get("base_dir", ".")).resolve())
+    catalog = ProfileCatalog(
+        data_path,
+        config["profiles"],
+        base_dir=Path(config.get("base_dir", PROJECT_ROOT)).resolve(),
+    )
     databases = {name: UsageDatabase(data_path / name / "database") for name in config["profiles"]}
-    selector = AssetSelector(rng=rng)
+    selector = AssetSelector(rng=rng, settings=config)
     builder = WorkflowBuilder(rng=rng)
     from_image = FromImageWorkflow(rng=rng)
     client = ComfyUIClient(**config["comfyui"], timeout=config["generation"].get("request_timeout", 30))
@@ -101,7 +113,7 @@ def main() -> int:
                     if checkpoint_mode == "fromImg":
                         image_dir = Path(profile_cfg.get("from_img_path", gen.get("from_img_path", "")))
                         if not image_dir.is_absolute():
-                            image_dir = Path(config.get("base_dir", ".")) / image_dir
+                            image_dir = Path(config.get("base_dir", PROJECT_ROOT)) / image_dir
                         imported = from_image.load(profile, image_dir)
                     if imported:
                         prompt, checkpoint, character, loras = imported
@@ -120,7 +132,7 @@ def main() -> int:
                 elif checkpoint_mode == "fromImg":
                     image_dir = Path(profile_cfg.get("from_img_path", gen.get("from_img_path", "")))
                     if not image_dir.is_absolute():
-                        image_dir = Path(config.get("base_dir", ".")) / image_dir
+                        image_dir = Path(config.get("base_dir", PROJECT_ROOT)) / image_dir
                     imported = from_image.load(profile, image_dir)
                     if imported:
                         prompt, checkpoint, character, loras = imported
@@ -157,14 +169,14 @@ def main() -> int:
                 if gen.get("print_workflow", False):
                     log.info("Workflow: %s", json.dumps(workflow, ensure_ascii=False))
                 if gen.get("save_workflow", False):
-                    log_dir = Path("log")
+                    log_dir = PROJECT_ROOT / "log"
                     log_dir.mkdir(parents=True, exist_ok=True)
                     stamp = time.strftime("%Y%m%d-%H%M%S")
                     save_path = log_dir / f"{profile_name}-{checkpoint.name}-{index + 1}-{stamp}.json"
                     save_path.write_text(json.dumps(workflow, ensure_ascii=False, indent=2), encoding="utf-8")
                 if args.dry_run:
                     continue
-                client.sync_model_names(workflow, gen.get("force_linux_path_nodes", []))
+                client.sync_model_names(workflow, gen.get("force_linux_path_nodes", config.get("forceLinuxPathNodes", [])))
                 if gen.get("queue_prompt", True):
                     client.queue_prompt(workflow)
                 if gen.get("queue_prompt_wait", gen.get("wait_for_queue", True)):
