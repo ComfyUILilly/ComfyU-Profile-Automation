@@ -94,8 +94,8 @@ def main() -> int:
             profile = catalog.load(profile_name)
             selector.database = databases[profile_name]
             log.info("Profile selected: %s (%d images)", profile_name, batch_count)
-            if not profile.checkpoints or not profile.workflow_api:
-                log.warning("Profile %s has no checkpoint assets or workflow_api.json", profile_name)
+            if not profile.checkpoints:
+                log.warning("Profile %s has no checkpoint assets", profile_name)
                 if args.dry_run:
                     return 2
                 time.sleep(2)
@@ -173,6 +173,12 @@ def main() -> int:
                         lora_count = _count(gen.get("lora_count", [1, 2]), rng)
                         loras = selector.choose(profile, "lora", lora_mode, lora_count)
                         lora_remaining = _span(gen, "images_per_lora", "queueLoop", 1, rng)
+                    if not profile.workflow_api:
+                        log.error(
+                            "Profile %s has no workflow_api.json and no compatible PNG workflow was loaded",
+                            profile_name,
+                        )
+                        return 2
                     workflow = builder.build(profile, checkpoint, character, loras,
                                              weight_metadata=selector.last_group_metadata)
 
