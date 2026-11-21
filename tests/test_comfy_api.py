@@ -27,6 +27,12 @@ class ComfyApiTests(unittest.TestCase):
             "subfolder/model.safetensors",
         )
 
+    def test_repeated_windows_separators_are_collapsed(self):
+        self.assertEqual(
+            ComfyUIClient._posix(r"folder\\\\nested\\\\model.safetensors"),
+            "folder/nested/model.safetensors",
+        )
+
     def test_force_linux_path_nodes_normalizes_nested_strings(self):
         client = ComfyUIClient(
             "http://127.0.0.1:8188/prompt",
