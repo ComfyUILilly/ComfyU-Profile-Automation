@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from pathlib import PurePosixPath
 from typing import Any
@@ -30,8 +31,14 @@ class ComfyUIClient:
         self.server_url = urlunsplit((parts.scheme, parts.netloc, path.rstrip("/"), "", "")).rstrip("/")
 
     @staticmethod
+    def _normalize_path(value: str) -> str:
+        # ComfyUI model names are relative paths; collapse both Windows
+        # separators and repeated separators into a single POSIX separator.
+        return re.sub(r"/+", "/", str(value).strip().replace("\\", "/"))
+
+    @staticmethod
     def _posix(value: str) -> str:
-        return str(value).strip().replace("\\", "/").replace("\\\\", "/")
+        return ComfyUIClient._normalize_path(value)
 
     @staticmethod
     def _flatten_names(value: Any) -> set[str]:
@@ -39,7 +46,7 @@ class ComfyUIClient:
 
         def visit(item: Any) -> None:
             if isinstance(item, str):
-                cleaned = item.strip().replace("\\", "/")
+                cleaned = ComfyUIClient._normalize_path(item)
                 if cleaned:
                     names.add(cleaned)
             elif isinstance(item, dict):
@@ -83,7 +90,7 @@ class ComfyUIClient:
     @staticmethod
     def _replace_separators(value: Any) -> Any:
         if isinstance(value, str):
-            return value.replace("\\", "/")
+            return ComfyUIClient._normalize_path(value)
         if isinstance(value, list):
             return [ComfyUIClient._replace_separators(item) for item in value]
         if isinstance(value, tuple):
@@ -102,6 +109,7 @@ class ComfyUIClient:
         """
         forced = {str(value) for value in (force_linux_path_nodes or [])}
         lora_names: set[str] | None = None
+        lora_names_loaded = False
 
         for node_id, node in workflow.items():
             if not isinstance(node, dict):
@@ -128,9 +136,13 @@ class ComfyUIClient:
                 continue
 
             normalized = self._posix(selected)
-            available = lora_names if folder == "loras" and lora_names is not None else self._available_models(folder)
             if folder == "loras":
-                lora_names = available
+                if not lora_names_loaded:
+                    lora_names = self._available_models(folder)
+                    lora_names_loaded = True
+                available = lora_names
+            else:
+                available = self._available_models(folder)
             if not available:
                 inputs[input_key] = normalized
                 continue
