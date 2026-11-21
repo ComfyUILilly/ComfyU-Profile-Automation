@@ -109,7 +109,7 @@ class AssetSelector:
 
         if category in ("checkpoint", "character") and mode == "Weight":
             weights = profile.weights.get(category, {})
-            if weights and self.rng.random() < self._probability(category):
+            if weights:
                 return self._weighted_sample(source, weights, amount)
             return self.rng.sample(source, amount)
 
