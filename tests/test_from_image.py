@@ -18,7 +18,7 @@ class FromImageTests(unittest.TestCase):
         prompt = {
             "42": {
                 "class_type": "CheckpointLoaderSimple",
-                "inputs": {"ckpt_name": "old.safetensors"},
+                "inputs": {"ckpt_name": "base.safetensors"},
             },
             "CheckpointLoaderSimple": {
                 "class_type": "CheckpointLoaderSimple",
