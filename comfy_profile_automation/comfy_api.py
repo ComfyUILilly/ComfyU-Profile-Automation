@@ -16,9 +16,17 @@ log = logging.getLogger(__name__)
 class ComfyUIClient:
     """Small ComfyUI API client with tolerant model-name/path synchronization."""
 
+    # Keep the endpoint/input mapping used by the original automation.
+    # In particular, legacy ComfyUI exposes UNETLoader choices through
+    # /models/checkpoints on installations used by this project.
     MODEL_INPUTS = {
+        "UltralyticsDetectorProvider": ("model_name", "ultralytics"),
+        "SAMLoader": ("model_name", "sams"),
         "CheckpointLoaderSimple": ("ckpt_name", "checkpoints"),
-        "UNETLoader": ("unet_name", "diffusion_models"),
+        "UNETLoader": ("unet_name", "checkpoints"),
+        "LoraLoaderBlockWeight": ("lora_name", "loras"),
+        "LoraLoader": ("lora_name", "loras"),
+        "ControlNetLoader": ("control_net_name", "controlnet"),
         "VAELoader": ("vae_name", "vae"),
     }
 
@@ -99,17 +107,54 @@ class ComfyUIClient:
             return {key: ComfyUIClient._replace_separators(item) for key, item in value.items()}
         return value
 
-    def sync_model_names(self, workflow: dict[str, Any],
-                         force_linux_path_nodes: list[str] | tuple[str, ...] | None = None) -> dict[str, Any]:
-        """Normalize model paths and resolve unique filename aliases against ComfyUI.
+    @staticmethod
+    def _from_img_fallback(from_img_fallbacks: dict[str, Any] | None,
+                           class_type: str, input_key: str) -> str | None:
+        if not isinstance(from_img_fallbacks, dict):
+            return None
+        direct = from_img_fallbacks.get(class_type)
+        if isinstance(direct, dict):
+            value = direct.get(input_key)
+            if isinstance(value, str) and value:
+                return value
+        for prefix, settings in from_img_fallbacks.items():
+            if class_type.startswith(str(prefix)) and isinstance(settings, dict):
+                value = settings.get(input_key)
+                if isinstance(value, str) and value:
+                    return value
+        return None
 
-        The server model-list endpoints are used when available. If a list cannot
-        be fetched, or a name is not present, the workflow's original selection
-        is retained rather than blocking generation.
+    @staticmethod
+    def _model_spec(class_type: str) -> tuple[str, str] | None:
+        exact = ComfyUIClient.MODEL_INPUTS.get(class_type)
+        if exact:
+            return exact
+        # Legacy custom node families commonly append a suffix to their name.
+        for prefix in sorted(ComfyUIClient.MODEL_INPUTS, key=len, reverse=True):
+            if class_type.startswith(prefix):
+                return ComfyUIClient.MODEL_INPUTS[prefix]
+        return None
+
+    def sync_model_names(
+        self,
+        workflow: dict[str, Any],
+        force_linux_path_nodes: list[str] | tuple[str, ...] | None = None,
+        from_img_fallbacks: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Synchronize legacy model-loader nodes with ComfyUI's model lists.
+
+        Exact relative paths win. A basename is used only when it identifies
+        one model, preventing accidental cross-folder selection. When the
+        current model is missing, the old fromImgIf fallback is applied.
+        Unavailable endpoints never block prompt submission.
         """
         forced = {str(value) for value in (force_linux_path_nodes or [])}
-        lora_names: set[str] | None = None
-        lora_names_loaded = False
+        model_cache: dict[str, set[str] | None] = {}
+
+        def available(folder: str) -> set[str] | None:
+            if folder not in model_cache:
+                model_cache[folder] = self._available_models(folder)
+            return model_cache[folder]
 
         for node_id, node in workflow.items():
             if not isinstance(node, dict):
@@ -119,14 +164,13 @@ class ComfyUIClient:
             if not isinstance(inputs, dict):
                 continue
 
-            if node_id in forced or class_type in forced:
+            force_linux = node_id in forced or class_type in forced
+            if force_linux:
                 normalized_inputs = self._replace_separators(inputs)
                 inputs.clear()
                 inputs.update(normalized_inputs)
 
-            model_spec = self.MODEL_INPUTS.get(class_type)
-            if model_spec is None and class_type.startswith("LoraLoader"):
-                model_spec = ("lora_name", "loras")
+            model_spec = self._model_spec(class_type)
             if model_spec is None:
                 continue
 
@@ -135,26 +179,55 @@ class ComfyUIClient:
             if not isinstance(selected, str) or not selected.strip():
                 continue
 
-            normalized = self._posix(selected)
-            if folder == "loras":
-                if not lora_names_loaded:
-                    lora_names = self._available_models(folder)
-                    lora_names_loaded = True
-                available = lora_names
-            else:
-                available = self._available_models(folder)
-            if not available:
-                inputs[input_key] = normalized
+            model_names = available(folder)
+            selected_normalized = self._normalize_path(selected)
+            canonical = None
+            if model_names:
+                exact = {
+                    self._normalize_path(name).casefold(): name
+                    for name in model_names
+                }
+                canonical = exact.get(selected_normalized.casefold())
+                if canonical is None:
+                    basename = PurePosixPath(selected_normalized).name.casefold()
+                    matches = [
+                        name for name in model_names
+                        if PurePosixPath(self._normalize_path(name)).name.casefold() == basename
+                    ]
+                    if len(matches) == 1:
+                        canonical = matches[0]
+
+            if canonical is not None:
+                inputs[input_key] = self._posix(canonical) if force_linux else canonical
                 continue
 
-            exact = {name.casefold(): name for name in available}
-            canonical = exact.get(normalized.casefold())
-            if canonical is None:
-                basename = PurePosixPath(normalized).name.casefold()
-                matches = [name for name in available if PurePosixPath(name).name.casefold() == basename]
-                if len(matches) == 1:
-                    canonical = matches[0]
-            inputs[input_key] = canonical or normalized
+            fallback = self._from_img_fallback(from_img_fallbacks, class_type, input_key)
+            if fallback:
+                fallback_normalized = self._normalize_path(fallback)
+                fallback_match = None
+                if model_names:
+                    exact = {
+                        self._normalize_path(name).casefold(): name
+                        for name in model_names
+                    }
+                    fallback_match = exact.get(fallback_normalized.casefold())
+                    if fallback_match is None:
+                        fallback_basename = PurePosixPath(fallback_normalized).name.casefold()
+                        matches = [
+                            name for name in model_names
+                            if PurePosixPath(self._normalize_path(name)).name.casefold() == fallback_basename
+                        ]
+                        if len(matches) == 1:
+                            fallback_match = matches[0]
+                resolved_fallback = fallback_match or fallback
+                inputs[input_key] = self._posix(resolved_fallback) if force_linux else resolved_fallback
+                log.warning(
+                    "[%s] Model not found: %s. Fallback applied: %s",
+                    class_type, selected, inputs[input_key],
+                )
+            elif force_linux:
+                # The forced node was normalized above; no guessed replacement.
+                inputs[input_key] = self._posix(selected)
 
         return workflow
 
