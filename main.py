@@ -122,8 +122,16 @@ def main() -> int:
                         checkpoint_remaining = character_remaining = lora_remaining = 1
                     else:
                         if checkpoint_mode == "fromImg":
-                            log.warning("No compatible PNG workflow for %s; falling back to Weight", profile_name)
-                            checkpoint_mode = "Weight"
+                            log.warning("No compatible PNG workflow for %s; using a configured checkpoint fallback", profile_name)
+                            configured_modes = profile_cfg.get("checkpoint_kind", gen.get("checkpoint_kind", "Weight"))
+                            if isinstance(configured_modes, dict):
+                                fallback_modes = {
+                                    key: weight for key, weight in configured_modes.items()
+                                    if key != "fromImg"
+                                }
+                                checkpoint_mode = _mode(fallback_modes, rng) if fallback_modes else "Weight"
+                            else:
+                                checkpoint_mode = "Weight"
                         checkpoint = selector.choose(profile, "checkpoint", checkpoint_mode)[0]
                         checkpoint_remaining = _span(gen, "images_per_checkpoint", "CheckpointLoop", 1, rng)
                         character = None
@@ -140,7 +148,15 @@ def main() -> int:
                         workflow = builder.prepare_from_image(profile, prompt, checkpoint, character, loras)
                         checkpoint_remaining = character_remaining = lora_remaining = 1
                     else:
-                        checkpoint_mode = "Weight"
+                        configured_modes = profile_cfg.get("checkpoint_kind", gen.get("checkpoint_kind", "Weight"))
+                        if isinstance(configured_modes, dict):
+                            fallback_modes = {
+                                key: weight for key, weight in configured_modes.items()
+                                if key != "fromImg"
+                            }
+                            checkpoint_mode = _mode(fallback_modes, rng) if fallback_modes else "Weight"
+                        else:
+                            checkpoint_mode = "Weight"
                         checkpoint = selector.choose(profile, "checkpoint", checkpoint_mode)[0]
                         checkpoint_remaining = 1
 
@@ -177,7 +193,11 @@ def main() -> int:
                     save_path.write_text(json.dumps(workflow, ensure_ascii=False, indent=2), encoding="utf-8")
                 if args.dry_run:
                     continue
-                client.sync_model_names(workflow, gen.get("force_linux_path_nodes", config.get("forceLinuxPathNodes", [])))
+                client.sync_model_names(
+                    workflow,
+                    gen.get("force_linux_path_nodes", config.get("forceLinuxPathNodes", [])),
+                    config.get("fromImgIf", config.get("from_img_if", {})),
+                )
                 if gen.get("queue_prompt", True):
                     client.queue_prompt(workflow)
                 if gen.get("queue_prompt_wait", gen.get("wait_for_queue", True)):
