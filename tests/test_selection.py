@@ -29,6 +29,16 @@ class SelectionTests(unittest.TestCase):
             }},
         )
 
+    def test_weight_mode_always_uses_weight_map(self):
+        profile = self.make_profile()
+        profile.weights["character"] = {
+            profile.characters[0].identity: 100,
+            profile.characters[1].identity: 0,
+        }
+        selector = AssetSelector(rng=random.Random(1), settings={"CharWeightPer": 0})
+        selected = selector.choose(profile, "character", "Weight")
+        self.assertEqual([item.name for item in selected], ["a"])
+
     def test_skip_true_is_candidate_only_in_skip_mode(self):
         profile = self.make_profile()
         selector = AssetSelector(rng=random.Random(3))
