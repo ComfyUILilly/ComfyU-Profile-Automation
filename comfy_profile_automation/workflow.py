@@ -11,11 +11,13 @@ from .wildcards import WildcardEngine
 class WorkflowBuilder:
     """Build profile-isolated ComfyUI API prompts, including YAML prompt metadata."""
 
-    def __init__(self, rng: random.Random | None = None):
+    def __init__(self, rng: random.Random | None = None, settings: dict[str, Any] | None = None):
         self.rng = rng or random.Random()
+        self.settings = settings or {}
         self.wildcards = WildcardEngine(self.rng)
         self._base_lora_node_id = "LoraLoader"
         self._last_lora_node_ids = []
+        self._generation_counter = 0
 
     def build(self, profile: ProfileData, checkpoint: ModelFile,
               character: ModelFile | None, loras: list[ModelFile], weight_metadata: list[dict] | None = None) -> dict[str, Any]:
@@ -37,21 +39,34 @@ class WorkflowBuilder:
         lora_metadata = [self._metadata(profile, item) for item in loras]
         if not lora_metadata:
             lora_metadata = [profile.setup_wildcard.get("LoraWildcard", {})]
+        source_groups = {
+            "setup": [profile.setup_wildcard] if checkpoint_metadata.get("Setup", True) else [],
+            "Checkpoint": [checkpoint_metadata],
+            "Char": [character_metadata],
+            "Weight": list(weight_metadata or []),
+            "Lora": lora_metadata,
+        }
+        sort_order = self.settings.get(
+            "SetWildcardSort",
+            profile.setup_wildcard.get("SetWildcardSort", ["setup", "Checkpoint", "Char", "Weight", "Lora"]),
+        )
         wildcard_sources = []
-        if checkpoint_metadata.get("Setup", True):
-            wildcard_sources.append(profile.setup_wildcard)
-        wildcard_sources.append(checkpoint_metadata)
-        wildcard_sources.append(character_metadata)
-        wildcard_sources.extend(weight_metadata or [])
-        wildcard_sources.extend(lora_metadata)
+        for group_name in sort_order:
+            wildcard_sources.extend(source_groups.get(group_name, []))
         for item in assets:
             self._apply_node_metadata(workflow, self._metadata(profile, item))
         self._apply_character_defaults(workflow, profile, character)
         self._apply_lora_defaults(workflow, profile, loras)
         self._apply_prompt_metadata(workflow, profile, checkpoint, character, loras)
         self._set_save_prefix(workflow, profile, checkpoint, character, loras)
-        return self.wildcards.apply(workflow, profile.setup_wildcard, wildcard_sources,
-                                    shuffle=profile.setup_wildcard.get("shuffleWildcard", False))
+        return self.wildcards.apply(
+            workflow,
+            profile.setup_wildcard,
+            wildcard_sources,
+            shuffle=self.settings.get(
+                "shuffleWildcard", profile.setup_wildcard.get("shuffleWildcard", False)
+            ),
+        )
 
     @staticmethod
     def _metadata(profile, item):
@@ -131,24 +146,19 @@ class WorkflowBuilder:
         return False
 
     def _set_checkpoint(self, workflow, profile_name, relative_path):
-        preferred = ("UNETLoader",) if profile_name == "Anime" else ("CheckpointLoaderSimple",)
-        fallback = ("CheckpointLoaderSimple", "UNETLoader") if profile_name == "Anime" else ("UNETLoader", "CheckpointLoaderSimple")
-        if self._set_first_input(workflow, preferred, "unet_name" if profile_name == "Anime" else "ckpt_name", relative_path):
-            return
-        for node_id, node in workflow.items():
-            class_type = str(node.get("class_type", "")) if isinstance(node, dict) else ""
-            if class_type == "UNETLoader":
-                node.setdefault("inputs", {})["unet_name"] = relative_path
+        preferred = ("UNETLoader", "CheckpointLoaderSimple") if profile_name == "Anime" else (
+            "CheckpointLoaderSimple", "UNETLoader"
+        )
+        for loader_type in preferred:
+            input_key = "unet_name" if loader_type == "UNETLoader" else "ckpt_name"
+            direct = workflow.get(loader_type)
+            if isinstance(direct, dict):
+                direct.setdefault("inputs", {})[input_key] = relative_path
                 return
-            if class_type == "CheckpointLoaderSimple":
-                node.setdefault("inputs", {})["ckpt_name"] = relative_path
-                return
-        for node_id in fallback:
-            node = workflow.get(node_id)
-            if isinstance(node, dict):
-                key = "unet_name" if node_id == "UNETLoader" else "ckpt_name"
-                node.setdefault("inputs", {})[key] = relative_path
-                return
+            for node in workflow.values():
+                if isinstance(node, dict) and node.get("class_type") == loader_type:
+                    node.setdefault("inputs", {})[input_key] = relative_path
+                    return
 
     def _attach_loras(self, workflow, loras, profile_name, checkpoint_metadata):
         self._last_lora_node_ids = []
@@ -212,18 +222,51 @@ class WorkflowBuilder:
                 for key, value in values.items():
                     inputs[key] = self._random_value(value)
 
-    @staticmethod
-    def _set_save_prefix(workflow, profile, checkpoint, character, loras):
+    def _set_save_prefix(self, workflow, profile, checkpoint, character, loras):
         from datetime import datetime
-        character_name = character.name if character else "wildcard"
-        lora_count = len(loras)
+
+        checkpoint_metadata = self._metadata(profile, checkpoint)
+        character_metadata = self._metadata(profile, character) if character else {}
+
+        def flag_marker(metadata):
+            if metadata.get("favorites") not in (False, None, 0):
+                return "#"
+            skip_value = metadata.get("skip")
+            if skip_value == "auto":
+                return "@"
+            if skip_value not in (False, None, 0):
+                return "="
+            return "+"
+
+        checkpoint_marker = flag_marker(checkpoint_metadata)
+        character_marker = "%" if character is None else flag_marker(character_metadata)
+        checkpoint_weight = checkpoint_metadata.get("weight", "")
+        character_weight = character_metadata.get("weight", "") if character else ""
+        character_name = character.name if character else "Wildcard"
+
+        tags = []
+        for item in loras:
+            raw_tags = self._metadata(profile, item).get("tag", [])
+            if isinstance(raw_tags, str):
+                tags.append(raw_tags.lower())
+            elif isinstance(raw_tags, (list, tuple, set)):
+                tags.extend(str(tag).lower() for tag in raw_tags)
+        style_dress = ("S" if "style" in tags else "") + ("D" if "dress" in tags else "")
+
+        checkpoint_label = f"{checkpoint.name}{checkpoint_marker}{checkpoint_weight}"
+        character_label = f"{character_name}{character_marker}{character_weight}"
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        prefix = f"{profile.name}/{checkpoint.name}/{character_name}/{checkpoint.name}-{character_name}-{lora_count}-{timestamp}"
+        self._generation_counter += 1
+        prefix = (
+            f"{profile.name}/{checkpoint_label}/{character_label}/"
+            f"{checkpoint_label}-{character_label}-{style_dress}-{len(loras)}-"
+            f"{timestamp}-{self._generation_counter}"
+        )
         for node_id in ("SaveImage1", "SaveImage2", "SaveVideo"):
             node = workflow.get(node_id)
             if isinstance(node, dict):
                 node.setdefault("inputs", {})["filename_prefix"] = prefix
-        if profile.setup_workflow.get("noSaveImage1"):
+        if self.settings.get("noSaveImage1", profile.setup_workflow.get("noSaveImage1", False)):
             workflow.pop("SaveImage1", None)
 
     def _apply_character_defaults(self, workflow, profile, character):
