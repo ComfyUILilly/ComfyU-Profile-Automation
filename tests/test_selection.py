@@ -69,6 +69,10 @@ class SelectionTests(unittest.TestCase):
         chosen = selector._pick_group_lora({"a": 0, "b": 1})
         self.assertEqual(chosen, ["b"])
 
+    def test_group_lora_mapping_with_no_positive_weights_is_empty(self):
+        selector = AssetSelector(rng=random.Random(7))
+        self.assertEqual(selector._pick_group_lora({"a": 0, "b": -1}), [])
+
 
 class CatalogTests(unittest.TestCase):
     def test_asset_yaml_weight_overrides_weight_file(self):
