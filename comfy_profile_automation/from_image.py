@@ -16,7 +16,7 @@ class FromImageWorkflow:
     def __init__(self, rng: random.Random | None = None):
         self.rng = rng or random.Random()
 
-    def load(self, profile: ProfileData, image_dir: Path):
+    def load(self, profile: ProfileData, image_dir: Path, node_map: dict[str, str] | None = None):
         if not image_dir.exists():
             return None
         images = list(image_dir.rglob("*.png"))
@@ -25,7 +25,7 @@ class FromImageWorkflow:
             prompt = self._read_prompt(image_path)
             if not prompt:
                 continue
-            checkpoint_node, checkpoint_key, checkpoint = self._resolve_checkpoint(profile, prompt)
+            checkpoint_node, checkpoint_key, checkpoint = self._resolve_checkpoint(profile, prompt, node_map)
             if not checkpoint:
                 continue
             character, loras, lora_nodes = self._resolve_loras(profile, prompt)
@@ -48,12 +48,18 @@ class FromImageWorkflow:
             return None
 
     @staticmethod
-    def _resolve_checkpoint(profile, prompt):
-        node_id = "UNETLoader" if profile.name == "Anime" and "UNETLoader" in prompt else None
-        if not node_id:
-            node_id = "CheckpointLoaderSimple" if "CheckpointLoaderSimple" in prompt else "UNETLoader" if "UNETLoader" in prompt else None
-        if not node_id:
-            return None, None, None
+    def _resolve_checkpoint(profile, prompt, node_map=None):
+        configured_node = node_map.get(profile.name) if isinstance(node_map, dict) else None
+        if configured_node:
+            node_id = str(configured_node)
+            if node_id not in prompt:
+                return None, None, None
+        else:
+            node_id = "UNETLoader" if profile.name == "Anime" and "UNETLoader" in prompt else None
+            if not node_id:
+                node_id = "CheckpointLoaderSimple" if "CheckpointLoaderSimple" in prompt else "UNETLoader" if "UNETLoader" in prompt else None
+            if not node_id:
+                return None, None, None
         key = "unet_name" if node_id == "UNETLoader" else "ckpt_name"
         value = prompt.get(node_id, {}).get("inputs", {}).get(key)
         filename = Path(str(value or "").replace("\\", "/")).name
