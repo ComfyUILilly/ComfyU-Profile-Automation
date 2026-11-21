@@ -63,6 +63,7 @@ def load_config(path: str | Path) -> dict[str, Any]:
         "CheckpointLoop", "CharLoop", "queueLoop", "queue_prompt",
         "queue_prompt_wait", "sleep", "json_to_xlsx_interval",
         "WorkflowPrint", "WorkflowSave",
+        "LoraDbCnt", "LoraRandomCnt", "LoraCycleCnt",
     )
     for key in legacy_generation_keys:
         if key in config and key not in generation:
@@ -71,6 +72,9 @@ def load_config(path: str | Path) -> dict[str, Any]:
                 "json_to_xlsx_interval": "xlsx_export_interval",
                 "WorkflowPrint": "print_workflow",
                 "WorkflowSave": "save_workflow",
+                "LoraDbCnt": "lora_db_count",
+                "LoraRandomCnt": "lora_random_count",
+                "LoraCycleCnt": "lora_cycle_count",
             }.get(key, key)
             generation[mapped] = config[key]
 
