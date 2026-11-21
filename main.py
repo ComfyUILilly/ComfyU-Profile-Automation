@@ -70,7 +70,7 @@ def main() -> int:
     )
     databases = {name: UsageDatabase(data_path / name / "database") for name in config["profiles"]}
     selector = AssetSelector(rng=rng, settings=config)
-    builder = WorkflowBuilder(rng=rng)
+    builder = WorkflowBuilder(rng=rng, settings=config)
     from_image = FromImageWorkflow(rng=rng)
     client = ComfyUIClient(**config["comfyui"], timeout=config["generation"].get("request_timeout", 30))
     observer = None
