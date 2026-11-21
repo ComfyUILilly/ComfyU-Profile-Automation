@@ -42,7 +42,7 @@ class AssetSelector:
     def _flag_candidates(self, profile: ProfileData, category: str,
                          source: list[ModelFile], flag: str) -> list[ModelFile]:
         return [item for item in source
-                if self._metadata(profile, category, item).get(flag) not in (None, False, 0, "")]
+                if self._metadata(profile, category, item).get(flag) not in (False, None)]
 
     def _fallback_flag_mode(self, profile: ProfileData, category: str,
                             source: list[ModelFile], count: int) -> list[ModelFile]:
