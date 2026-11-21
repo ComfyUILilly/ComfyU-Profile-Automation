@@ -66,6 +66,7 @@ def main() -> int:
         data_path,
         config["profiles"],
         base_dir=Path(config.get("base_dir", PROJECT_ROOT)).resolve(),
+        defaults=config,
     )
     databases = {name: UsageDatabase(data_path / name / "database") for name in config["profiles"]}
     selector = AssetSelector(rng=rng, settings=config)
