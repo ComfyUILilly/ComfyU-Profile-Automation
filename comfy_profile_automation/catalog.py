@@ -67,8 +67,6 @@ class ProfileCatalog:
         if not root.is_absolute():
             root = self.base_dir / root
         root = root.resolve()
-        if not root.exists() and profile == "Anime" and category == "checkpoint" and root.parent.exists():
-            root = root.parent
         if not root.exists():
             return []
         relative_base = root
