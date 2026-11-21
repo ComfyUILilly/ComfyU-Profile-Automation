@@ -35,6 +35,12 @@ class SelectionTests(unittest.TestCase):
         selected = selector.choose(profile, "character", "Skip")
         self.assertEqual([item.name for item in selected], ["a"])
 
+    def test_skip_auto_is_also_a_skip_candidate(self):
+        profile = self.make_profile()
+        profile.metadata["character"]["a.safetensors"]["skip"] = "auto"
+        selector = AssetSelector(rng=random.Random(3))
+        self.assertEqual(selector.choose(profile, "character", "Skip")[0].name, "a")
+
     def test_skip_true_is_not_global_exclusion(self):
         profile = self.make_profile()
         selector = AssetSelector(rng=random.Random(4))
@@ -60,7 +66,6 @@ class SelectionTests(unittest.TestCase):
 
     def test_group_lora_mapping_selects_one_weighted_name(self):
         selector = AssetSelector(rng=random.Random(7))
-        # A mapping is one weighted choice, matching the legacy random_weight helper.
         chosen = selector._pick_group_lora({"a": 0, "b": 1})
         self.assertEqual(chosen, ["b"])
 
@@ -69,23 +74,42 @@ class CatalogTests(unittest.TestCase):
     def test_asset_yaml_weight_overrides_weight_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            model_dir = root / "IL" / "char"
+            data_root = root / "data"
+            model_dir = root / "models" / "IL" / "char"
             model_dir.mkdir(parents=True)
             (model_dir / "hero.safetensors").write_text("x", encoding="utf-8")
-            yml_dir = root / "IL" / "lora" / "char"
+
+            yml_dir = data_root / "IL" / "lora" / "char"
             yml_dir.mkdir(parents=True)
             (yml_dir / "hero.yml").write_text(
                 yaml.safe_dump({"hero": {"skip": True, "weight": 9}}), encoding="utf-8"
             )
-            (root / "IL" / "WeightChar.yml").write_text("hero: 2\n", encoding="utf-8")
+            (data_root / "IL" / "WeightChar.yml").write_text("hero: 2\n", encoding="utf-8")
+
             catalog = ProfileCatalog(
-                root,
+                data_root,
                 {"IL": {"character_path": str(model_dir)}},
                 defaults={"CharWeightDefault": 3},
             )
             profile = catalog.load("IL")
-            self.assertEqual(profile.weights["character"]["IL/character/IL/hero.safetensors"], 9)
-            self.assertTrue(profile.metadata["character"]["hero"]["skip"])
+            item = profile.characters[0]
+            self.assertEqual(profile.weights["character"][item.identity], 9)
+            self.assertTrue(profile.metadata["character"][item.relative_path]["skip"])
+
+    def test_configured_default_weight_is_used(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            data_root = root / "data"
+            model_dir = root / "models" / "IL" / "char"
+            model_dir.mkdir(parents=True)
+            (model_dir / "hero.safetensors").write_text("x", encoding="utf-8")
+            profile = ProfileCatalog(
+                data_root,
+                {"IL": {"character_path": str(model_dir)}},
+                defaults={"CharWeightDefault": 17},
+            ).load("IL")
+            item = profile.characters[0]
+            self.assertEqual(profile.weights["character"][item.identity], 17)
 
 
 if __name__ == "__main__":
