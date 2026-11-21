@@ -48,6 +48,18 @@ def _span(generation, modern_key, legacy_key, default, rng):
     return default
 
 
+def _lora_selection_count(generation, mode, rng):
+    mode_key = {
+        "DB": "lora_db_count",
+        "Random": "lora_random_count",
+        "Cycle": "lora_cycle_count",
+    }.get(mode)
+    value = generation.get(mode_key, generation.get("lora_count", [1, 2])) if mode_key else generation.get(
+        "lora_count", [1, 2]
+    )
+    return _count(value, rng)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="ComfyUI profile automation")
     parser.add_argument("--config", default=str(PROJECT_ROOT / "config.yml"))
@@ -115,7 +127,7 @@ def main() -> int:
                         image_dir = Path(profile_cfg.get("from_img_path", gen.get("from_img_path", "")))
                         if not image_dir.is_absolute():
                             image_dir = Path(config.get("base_dir", PROJECT_ROOT)) / image_dir
-                        imported = from_image.load(profile, image_dir)
+                        imported = from_image.load(profile, image_dir, config.get("fromImgNode", config.get("from_img_node", {})))
                     if imported:
                         prompt, checkpoint, character, loras = imported
                         workflow = builder.prepare_from_image(profile, prompt, checkpoint, character, loras)
@@ -170,7 +182,7 @@ def main() -> int:
                         lora_remaining = 0
                     if lora_remaining <= 0:
                         lora_mode = _mode(profile_cfg.get("lora_kind", gen.get("lora_kind", "Weight")), rng)
-                        lora_count = _count(gen.get("lora_count", [1, 2]), rng)
+                        lora_count = _lora_selection_count(gen, lora_mode, rng)
                         loras = selector.choose(profile, "lora", lora_mode, lora_count)
                         lora_remaining = _span(gen, "images_per_lora", "queueLoop", 1, rng)
                     if not profile.workflow_api:
