@@ -18,6 +18,20 @@ class CatalogTests(unittest.TestCase):
             self.assertEqual({x.relative_path for x in assets},
                              {"a/same.safetensors", "b/same.safetensors"})
 
+    def test_anime_does_not_fallback_to_shared_parent_models(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            shared = root / "models" / "diffusion_models"
+            (shared / "IL").mkdir(parents=True)
+            (shared / "IL" / "not_anime.safetensors").write_text("x")
+            profiles = {
+                "Anime": {"checkpoint_path": str(shared / "Anime")},
+                "IL": {"checkpoint_path": str(shared / "IL")},
+            }
+            catalog = ProfileCatalog(root / "data", profiles, base_dir=root)
+            self.assertEqual(catalog.load("Anime").checkpoints, [])
+            self.assertEqual([x.name for x in catalog.load("IL").checkpoints], ["not_anime"])
+
     def test_profile_isolation(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
