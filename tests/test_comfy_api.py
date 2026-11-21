@@ -33,6 +33,82 @@ class ComfyApiTests(unittest.TestCase):
             "folder/nested/model.safetensors",
         )
 
+    def test_legacy_custom_model_nodes_are_synchronized(self):
+        client = ComfyUIClient(
+            "http://127.0.0.1:8188/prompt",
+            "http://127.0.0.1:8188/queue",
+        )
+        response = Mock()
+        response.json.return_value = ["controlnet/control.safetensors"]
+        response.raise_for_status.return_value = None
+        client.session.get = Mock(return_value=response)
+        workflow = {
+            "1": {
+                "class_type": "ControlNetLoader",
+                "inputs": {"control_net_name": "missing/control.safetensors"},
+            }
+        }
+        client.sync_model_names(workflow)
+        self.assertEqual(
+            workflow["1"]["inputs"]["control_net_name"],
+            "controlnet/control.safetensors",
+        )
+        self.assertEqual(
+            client.session.get.call_args.args[0],
+            "http://127.0.0.1:8188/models/controlnet",
+        )
+
+    def test_from_img_fallback_is_used_for_missing_model(self):
+        client = ComfyUIClient(
+            "http://127.0.0.1:8188/prompt",
+            "http://127.0.0.1:8188/queue",
+        )
+        response = Mock()
+        response.json.return_value = []
+        response.raise_for_status.return_value = None
+        client.session.get = Mock(return_value=response)
+        workflow = {
+            "1": {
+                "class_type": "UltralyticsDetectorProvider",
+                "inputs": {"model_name": "missing/model.pt"},
+            }
+        }
+        client.sync_model_names(
+            workflow,
+            from_img_fallbacks={
+                "UltralyticsDetectorProvider": {"model_name": "bbox/face_yolov9c.pt"}
+            },
+        )
+        self.assertEqual(
+            workflow["1"]["inputs"]["model_name"],
+            "bbox/face_yolov9c.pt",
+        )
+
+    def test_lora_loader_block_weight_uses_lora_endpoint(self):
+        client = ComfyUIClient(
+            "http://127.0.0.1:8188/prompt",
+            "http://127.0.0.1:8188/queue",
+        )
+        response = Mock()
+        response.json.return_value = ["IL/etc/sample.safetensors"]
+        response.raise_for_status.return_value = None
+        client.session.get = Mock(return_value=response)
+        workflow = {
+            "1": {
+                "class_type": "LoraLoaderBlockWeight",
+                "inputs": {"lora_name": "sample.safetensors"},
+            }
+        }
+        client.sync_model_names(workflow)
+        self.assertEqual(
+            workflow["1"]["inputs"]["lora_name"],
+            "IL/etc/sample.safetensors",
+        )
+        self.assertEqual(
+            client.session.get.call_args.args[0],
+            "http://127.0.0.1:8188/models/loras",
+        )
+
     def test_force_linux_path_nodes_normalizes_nested_strings(self):
         client = ComfyUIClient(
             "http://127.0.0.1:8188/prompt",
