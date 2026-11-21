@@ -30,7 +30,9 @@ class WildcardEngine:
                     weights.append(max(0.0, float(weight)))
                 except (TypeError, ValueError):
                     weights.append(1.0)
-            return self.rng.choices(options, weights=weights if any(weights) else None, k=1)[0] if options else ""
+            if not options or not any(weight > 0 for weight in weights):
+                return ""
+            return self.rng.choices(options, weights=weights, k=1)[0]
         return str(value)
 
     def expand(self, text: str, definitions: dict[str, Any], max_depth: int = 12) -> str:
@@ -50,13 +52,25 @@ class WildcardEngine:
         return result
 
     @staticmethod
+    def _deep_update(target: dict, source: dict) -> None:
+        for key, value in source.items():
+            if isinstance(value, dict):
+                current = target.get(key)
+                if not isinstance(current, dict):
+                    current = {}
+                    target[key] = current
+                WildcardEngine._deep_update(current, value)
+            else:
+                target[key] = value
+
+    @staticmethod
     def _merge(target: dict, source: Any) -> None:
         if not isinstance(source, dict):
             return
         for section in ("positive", "negative"):
             values = source.get(section, {})
             if isinstance(values, dict):
-                target[section].update(values)
+                WildcardEngine._deep_update(target[section], values)
             elif isinstance(values, str) and values:
                 target[section][f"item{len(target[section]) + 1}"] = values
 
