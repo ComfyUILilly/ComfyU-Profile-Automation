@@ -70,7 +70,8 @@ class WildcardEngine:
         for section in ("positive", "negative"):
             values = source.get(section, {})
             if isinstance(values, dict):
-                WildcardEngine._deep_update(target[section], values)
+                destination = target.setdefault(section, {})
+                WildcardEngine._deep_update(destination, values)
             elif isinstance(values, str) and values:
                 target[section][f"item{len(target[section]) + 1}"] = values
 
