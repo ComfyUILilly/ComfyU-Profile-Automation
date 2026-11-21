@@ -147,9 +147,9 @@ class AssetSelector:
                     numeric = 0.0
                 names.append(name)
                 weights.append(numeric)
-            if not names:
+            if not names or not any(weight > 0 for weight in weights):
                 return []
-            return [self.rng.choices(names, weights=weights if any(weights) else None, k=1)[0]]
+            return [self.rng.choices(names, weights=weights, k=1)[0]]
         if isinstance(value, (list, tuple)):
             return [self.rng.choice(value)] if value else []
         if isinstance(value, str):
