@@ -121,6 +121,10 @@ class WorkflowBuilder:
                         continue
                     amount = self._random_value(raw)
                     current = workflow[node_id]["inputs"][key]
+                    if isinstance(current, bool) or not isinstance(current, (int, float)):
+                        continue
+                    if isinstance(amount, bool) or not isinstance(amount, (int, float)):
+                        continue
                     if meta == "workflow_scale":
                         workflow[node_id]["inputs"][key] = current * amount
                     elif meta == "workflow_min":
@@ -129,6 +133,19 @@ class WorkflowBuilder:
                         workflow[node_id]["inputs"][key] = min(current, amount)
 
     def _random_value(self, value):
+        if isinstance(value, dict):
+            if not value:
+                return None
+            options = list(value)
+            weights = []
+            for weight in value.values():
+                try:
+                    weights.append(max(0.0, float(weight)))
+                except (TypeError, ValueError):
+                    weights.append(0.0)
+            if not any(weights):
+                return None
+            return self.rng.choices(options, weights=weights, k=1)[0]
         if isinstance(value, (list, tuple)) and value:
             if len(value) == 2 and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in value):
                 low, high = sorted(value)
