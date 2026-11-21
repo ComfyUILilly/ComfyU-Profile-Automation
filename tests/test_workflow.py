@@ -17,6 +17,24 @@ class WorkflowTests(unittest.TestCase):
             "old.safetensors",
         )
 
+    def test_weighted_dictionary_setting_uses_legacy_weight_choice(self):
+        builder = WorkflowBuilder()
+        builder.rng = __import__("random").Random(5)
+        self.assertEqual(builder._random_value({"first": 0, "second": 5}), "second")
+        self.assertIsNone(builder._random_value({"first": 0, "second": -1}))
+
+    def test_workflow_scale_does_not_multiply_non_numeric_values(self):
+        workflow = {
+            "1": {"inputs": {"text": "keep", "steps": 20}}
+        }
+        builder = WorkflowBuilder()
+        builder._apply_settings(
+            workflow,
+            {"workflow": {}, "workflow_scale": {"1": {"text": 2, "steps": 2}}},
+        )
+        self.assertEqual(workflow["1"]["inputs"]["text"], "keep")
+        self.assertEqual(workflow["1"]["inputs"]["steps"], 40)
+
     def test_cross_profile_assets_are_rejected(self):
         profile = ProfileData(name="IL", root=Path("."),
                               workflow_api={"1": {"inputs": {}}})
