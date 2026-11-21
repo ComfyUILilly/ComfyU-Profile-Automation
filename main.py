@@ -154,7 +154,7 @@ def main() -> int:
                     image_dir = Path(profile_cfg.get("from_img_path", gen.get("from_img_path", "")))
                     if not image_dir.is_absolute():
                         image_dir = Path(config.get("base_dir", PROJECT_ROOT)) / image_dir
-                    imported = from_image.load(profile, image_dir)
+                    imported = from_image.load(profile, image_dir, config.get("fromImgNode", config.get("from_img_node", {})))
                     if imported:
                         prompt, checkpoint, character, loras = imported
                         workflow = builder.prepare_from_image(profile, prompt, checkpoint, character, loras)
