@@ -54,11 +54,12 @@ class ProfileCatalog:
     MODEL_SUFFIXES = {".safetensors", ".ckpt", ".pt", ".pth"}
 
     def __init__(self, data_path: Path, profiles: dict[str, dict[str, Any]],
-                 base_dir: Path | None = None):
+                 base_dir: Path | None = None, defaults: dict[str, Any] | None = None):
         self.data_path = data_path.expanduser().resolve()
         self.profiles = profiles
         self.profile_names = tuple(profiles)
         self.base_dir = (base_dir or Path.cwd()).expanduser().resolve()
+        self.defaults = defaults or {}
 
     def _scan(self, profile: str, category: str, fallback_folder: str) -> list[ModelFile]:
         configured = self.profiles[profile].get(f"{category}_path")
@@ -127,6 +128,33 @@ class ProfileCatalog:
             merged.update(data)
         return merged
 
+    def _effective_asset_weights(self, category: str, models: list[ModelFile],
+                                 metadata: dict[str, Any], configured: dict[str, Any]) -> dict[str, Any]:
+        """Merge per-model YAML weights over Weight*.yml, as the legacy loader did."""
+        default_key = {
+            "checkpoint": "CheckpointWeightDefault",
+            "character": "CharWeightDefault",
+        }.get(category)
+        default = self.defaults.get(default_key, 3) if default_key else 1
+        weights = dict(configured) if isinstance(configured, dict) else {}
+
+        for item in models:
+            meta = metadata.get(item.relative_path)
+            if not isinstance(meta, dict):
+                # A stem alias is safe only if it identifies one model.
+                same_stem = [candidate for candidate in models if candidate.name == item.name]
+                meta = metadata.get(item.name, {}) if len(same_stem) == 1 else {}
+            meta_weight = meta.get("weight") if isinstance(meta, dict) else None
+            value = meta_weight or weights.get(
+                item.identity,
+                weights.get(item.relative_path, weights.get(item.name, default)),
+            )
+            weights[item.identity] = value
+            weights.setdefault(item.relative_path, value)
+            if sum(1 for candidate in models if candidate.name == item.name) == 1:
+                weights.setdefault(item.name, value)
+        return weights
+
     def load(self, profile: str) -> ProfileData:
         if profile not in self.profile_names:
             raise KeyError(f"Unknown profile: {profile}")
@@ -140,7 +168,7 @@ class ProfileCatalog:
         if workflow_path.exists():
             with workflow_path.open("r", encoding="utf-8-sig") as stream:
                 workflow = json.load(stream)
-        weights = {
+        raw_weights = {
             "checkpoint": self._yaml(root / "WeightCheckpoint.yml"),
             "character": self._yaml(root / "WeightChar.yml"),
             "lora": self._yaml(root / "WeightLora.yml"),
@@ -149,6 +177,14 @@ class ProfileCatalog:
             "checkpoint": self._load_asset_metadata(root / "checkpoint", checkpoints),
             "character": self._load_asset_metadata(root / "lora" / "char", characters),
             "lora": self._load_asset_metadata(root / "lora" / "etc", loras),
+        }
+        weights = {
+            "checkpoint": self._effective_asset_weights(
+                "checkpoint", checkpoints, metadata["checkpoint"], raw_weights["checkpoint"]),
+            "character": self._effective_asset_weights(
+                "character", characters, metadata["character"], raw_weights["character"]),
+            # WeightLora is a group definition (per/weight/total) in the legacy format.
+            "lora": raw_weights["lora"],
         }
         setup_workflow = self._deep_merge(
             self._yaml(self.data_path / "setupWorkflow.yml"),
