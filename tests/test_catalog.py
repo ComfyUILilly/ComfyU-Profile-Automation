@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from comfy_profile_automation.catalog import ProfileCatalog
+from comfy_profile_automation.catalog import ModelFile, ProfileCatalog
 
 
 class CatalogTests(unittest.TestCase):
@@ -86,7 +86,7 @@ class CatalogTests(unittest.TestCase):
     def test_asset_metadata_zero_weight_overrides_configured_weight(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            model = __import__("comfy_profile_automation.catalog", fromlist=["ModelFile"]).ModelFile(
+            model = ModelFile(
                 "IL", "checkpoint", root / "base.safetensors", "IL/base.safetensors"
             )
             weights = ProfileCatalog(root, {"IL": {}})._effective_asset_weights(
