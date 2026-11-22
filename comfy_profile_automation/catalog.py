@@ -156,7 +156,7 @@ class ProfileCatalog:
                 weights.get(item.relative_path, weights.get(item.name, default)),
             )
             weights[item.identity] = value
-            weights.setdefault(item.relative_path, value)
+            weights[item.relative_path] = value
             if sum(1 for candidate in models if candidate.name == item.name) == 1:
                 weights.setdefault(item.name, value)
         return weights
