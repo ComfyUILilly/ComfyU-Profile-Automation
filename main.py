@@ -69,7 +69,7 @@ def _resolve_start_checkpoint(start_value, catalog, log=None):
     """Resolve legacy safetensorsStart to one unambiguous active-profile asset."""
     if not isinstance(start_value, str) or not start_value.strip():
         return None, None
-    parts = [part for part in start_value.strip().replace("\\\\", "/").split("/") if part]
+    parts = [part for part in start_value.strip().replace("\\", "/").split("/") if part]
     if len(parts) < 2:
         if log:
             log.warning("Ignoring safetensorsStart without profile/file path: %s", start_value)
