@@ -200,8 +200,11 @@ def main() -> int:
                             profile_name,
                         )
                         return 2
-                    workflow = builder.build(profile, checkpoint, character, loras,
-                                             weight_metadata=selector.last_group_metadata)
+                    workflow = builder.build(
+                        profile, checkpoint, character, loras,
+                        weight_metadata=selector.last_group_metadata,
+                        lora_kind=lora_mode,
+                    )
 
                 log.info("[%s %d/%d] checkpoint=%s character=%s loras=%s",
                          profile_name, index + 1, batch_count, checkpoint.relative_path,
