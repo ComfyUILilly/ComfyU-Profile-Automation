@@ -147,7 +147,7 @@ class WorkflowTests(unittest.TestCase):
                 "LoraLoader": {"class_type": "LoraLoader", "inputs": {
                     "lora_name": "stale.safetensors", "strength_model": 1.0,
                     "strength_clip": 1.0, "model": ["CheckpointLoaderSimple", 0],
-                    "clip": ["CheckpointLoaderSimple", 1,
+                    "clip": ["CheckpointLoaderSimple", 1],
                 }},
             },
         )
