@@ -110,13 +110,85 @@ class UsageDatabase:
                 for row in self._table(profile, category).all()}
 
     def export_xlsx(self, output: Path | None = None) -> Path:
-        import pandas as pd
+        from openpyxl import Workbook
+        from openpyxl.styles import Font
+        from openpyxl.worksheet.table import Table, TableStyleInfo
+        from openpyxl.utils import get_column_letter
+        import json
+        import re
+
         output = output or self.root / "usage.xlsx"
-        rows = []
-        for table_name in self.db.tables():
-            for row in self.db.table(table_name).all():
-                rows.append({"profile_category": table_name, **row})
-        pd.DataFrame(rows).to_excel(output, index=False)
+        workbook = Workbook()
+        default_sheet = workbook.active
+        workbook.remove(default_sheet)
+        used_sheet_names = set()
+        used_table_names = set()
+
+        def safe_name(value, limit, fallback):
+            name = re.sub(r"[^A-Za-z0-9_]", "_", str(value)).strip("_") or fallback
+            if not name[0].isalpha() and name[0] != "_":
+                name = f"_{name}"
+            return name[:limit]
+
+        for index, table_name in enumerate(sorted(self.db.tables()), start=1):
+            rows = self.db.table(table_name).all()
+            rows = [dict(row) for row in rows]
+            for row in rows:
+                row.pop("doc_id", None)
+                for key, value in list(row.items()):
+                    if isinstance(value, (list, dict)):
+                        row[key] = json.dumps(value, ensure_ascii=False)
+            if rows and all("count" in row for row in rows):
+                rows.sort(key=lambda row: int(row.get("count", 0)), reverse=True)
+
+            sheet_base = str(table_name)[:31] or "Usage"
+            sheet_name = sheet_base
+            suffix = 2
+            while sheet_name in used_sheet_names:
+                tail = f"_{suffix}"
+                sheet_name = sheet_base[:31 - len(tail)] + tail
+                suffix += 1
+            used_sheet_names.add(sheet_name)
+            sheet = workbook.create_sheet(sheet_name)
+
+            headers = list(dict.fromkeys(key for row in rows for key in row))
+            if not headers:
+                headers = ["No data"]
+                sheet.append(headers)
+                continue
+            sheet.append(headers)
+            for row in rows:
+                sheet.append([row.get(key, "") for key in headers])
+            for cell in sheet[1]:
+                cell.font = Font(bold=True)
+
+            if rows:
+                table_name_safe = safe_name(table_name, 200, "Usage")
+                display_name = table_name_safe
+                suffix = 2
+                while display_name in used_table_names:
+                    display_name = f"{table_name_safe[:190]}_{suffix}"
+                    suffix += 1
+                used_table_names.add(display_name)
+                ref = f"A1:{get_column_letter(len(headers))}{len(rows) + 1}"
+                excel_table = Table(displayName=display_name, ref=ref)
+                excel_table.tableStyleInfo = TableStyleInfo(
+                    name="TableStyleMedium9",
+                    showFirstColumn=False,
+                    showLastColumn=False,
+                    showRowStripes=True,
+                    showColumnStripes=False,
+                )
+                sheet.add_table(excel_table)
+
+            for column_index, header in enumerate(headers, start=1):
+                letter = get_column_letter(column_index)
+                values = [len(str(header)), *[len(str(row.get(header, ""))) for row in rows]]
+                sheet.column_dimensions[letter].width = min(202, max(values, default=10) + 2)
+
+        if not workbook.sheetnames:
+            workbook.create_sheet("Usage")
+        workbook.save(output)
         return output
 
     def close(self) -> None:
