@@ -38,5 +38,19 @@ class MainHelperTests(unittest.TestCase):
             self.assertEqual(profile_name, "IL")
             self.assertEqual(checkpoint.name, "base")
 
+    def test_sleep_duration_supports_legacy_ranges(self):
+        from main import _sleep_duration
+        rng = random.Random(1)
+        self.assertIn(_sleep_duration([1, 3], rng), {1, 2, 3})
+        self.assertGreaterEqual(_sleep_duration([0.1, 0.2], rng), 0.1)
+        self.assertLessEqual(_sleep_duration([0.1, 0.2], rng), 0.2)
+
+    def test_sleep_duration_rejects_negative_values(self):
+        from main import _sleep_duration
+        with self.assertRaisesRegex(ValueError, "Sleep duration"):
+            _sleep_duration(-1, random.Random(1))
+        with self.assertRaisesRegex(ValueError, "Invalid sleep range"):
+            _sleep_duration([2, 1], random.Random(1))
+
 if __name__ == "__main__":
     unittest.main()
