@@ -175,5 +175,11 @@ class WorkflowTests(unittest.TestCase):
         wildcard = WorkflowBuilder().build(profile, checkpoint, None, [], lora_kind="Wildcard")
         self.assertIn("wildcard-token", wildcard["PrimitiveStringMultilineP"]["inputs"]["value"])
 
+    def test_excluded_workflow_nodes_are_not_overridden(self):
+        workflow = {"1": {"inputs": {"steps": 20}}}
+        builder = WorkflowBuilder(settings={"excludeNode": ["1"]})
+        builder._apply_settings(workflow, {"workflow": {"1": {"steps": 40}}})
+        self.assertEqual(workflow["1"]["inputs"]["steps"], 20)
+
 if __name__ == "__main__":
     unittest.main()
