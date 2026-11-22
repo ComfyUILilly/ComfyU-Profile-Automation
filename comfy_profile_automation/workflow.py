@@ -115,7 +115,10 @@ class WorkflowBuilder:
             excluded = {"charDefault", "loraDefault", "workflow_scale", "workflow_min", "workflow_max"}
             workflow_settings = {key: value for key, value in settings.items()
                                  if key not in excluded and isinstance(value, dict)}
+        excluded_nodes = set(settings.get("excludeNode", self.settings.get("excludeNode", [])) or [])
         for node_id, values in workflow_settings.items():
+            if node_id in excluded_nodes:
+                continue
             if node_id in workflow and isinstance(values, dict):
                 for key, value in values.items():
                     selected = self._random_value(value)
