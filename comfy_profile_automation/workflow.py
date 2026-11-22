@@ -31,6 +31,12 @@ class WorkflowBuilder:
         self._set_checkpoint(workflow, profile.name, checkpoint.relative_path)
         if character:
             self._set_first_input(workflow, ("LoraLoader",), "lora_name", character.relative_path)
+        elif profile.characters:
+            # Legacy wildcard-character mode still loads a valid LoRA into the
+            # base node but zeroes its strengths, rather than leaving a stale
+            # filename from the workflow template.
+            disabled_character = self.rng.choice(profile.characters)
+            self._set_first_input(workflow, ("LoraLoader",), "lora_name", disabled_character.relative_path)
         checkpoint_metadata = self._metadata(profile, checkpoint)
         self._apply_checkpoint_sampler(workflow, checkpoint_metadata)
         self._attach_loras(workflow, loras, profile.name, checkpoint_metadata)
