@@ -20,5 +20,21 @@ class MainHelperTests(unittest.TestCase):
         self.assertEqual(_mode({}, random.Random(1)), "Weight")
 
 
+    def test_resolve_start_checkpoint_supports_windows_relative_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            models = root / "IL" / "checkpoint"
+            models.mkdir(parents=True)
+            (models / "base.safetensors").write_text("model", encoding="utf-8")
+            from comfy_profile_automation.catalog import ProfileCatalog
+            catalog = ProfileCatalog(root / "data", {
+                "IL": {"checkpoint_path": str(models)},
+            }, base_dir=root)
+            profile_name, checkpoint = __import__("main")._resolve_start_checkpoint(
+                r"IL\\checkpoint\\base.safetensors", catalog
+            )
+            self.assertEqual(profile_name, "IL")
+            self.assertEqual(checkpoint.name, "base")
+
 if __name__ == "__main__":
     unittest.main()
