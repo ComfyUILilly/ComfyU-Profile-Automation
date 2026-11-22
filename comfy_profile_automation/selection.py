@@ -105,6 +105,10 @@ class AssetSelector:
                  "lora": "LoraDbWeightMin"}.get(category, ""), 1))
             weights = {item.identity: max(minimum, min(maximum - counts.get(
                 item.relative_path, counts.get(item.name, 0)), maximum)) for item in source}
+            if category == "lora":
+                # Legacy DB mode draws with replacement, then deduplicates into a set.
+                drawn = self.rng.choices(source, weights=[weights[item.identity] for item in source], k=amount)
+                return list(dict.fromkeys(drawn))
             return self._weighted_sample(source, weights, amount)
 
         if category in ("checkpoint", "character") and mode == "Weight":
