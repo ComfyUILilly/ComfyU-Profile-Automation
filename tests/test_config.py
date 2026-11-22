@@ -50,5 +50,19 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(result["data_path"], str((root.parent / "data").resolve()))
 
 
+    def test_malformed_config_yaml_reports_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.yml"
+            path.write_text("profiles: [bad", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, str(path)):
+                load_config(path)
+
+    def test_config_root_must_be_mapping(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.yml"
+            path.write_text("- one\n- two\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "root must be a mapping"):
+                load_config(path)
+
 if __name__ == "__main__":
     unittest.main()
