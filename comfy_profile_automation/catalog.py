@@ -84,8 +84,16 @@ class ProfileCatalog:
     def _yaml(path: Path) -> dict[str, Any]:
         if not path.exists():
             return {}
-        with path.open("r", encoding="utf-8-sig") as stream:
-            return yaml.load(stream, Loader=LegacySafeLoader) or {}
+        try:
+            with path.open("r", encoding="utf-8-sig") as stream:
+                value = yaml.load(stream, Loader=LegacySafeLoader) or {}
+        except yaml.YAMLError as exc:
+            mark = getattr(exc, "problem_mark", None)
+            location = f" (line {mark.line + 1}, column {mark.column + 1})" if mark else ""
+            raise ValueError(f"Invalid YAML in {path}{location}: {exc}") from exc
+        if not isinstance(value, dict):
+            raise ValueError(f"YAML root must be a mapping in {path}, got {type(value).__name__}")
+        return value
 
     @staticmethod
     def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
