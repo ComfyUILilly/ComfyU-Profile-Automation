@@ -1,4 +1,5 @@
 import random
+import tempfile
 import unittest
 
 from main import _count, _mode
