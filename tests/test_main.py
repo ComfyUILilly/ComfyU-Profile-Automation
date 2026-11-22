@@ -52,5 +52,9 @@ class MainHelperTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Invalid sleep range"):
             _sleep_duration([2, 1], random.Random(1))
 
+    def test_mode_rejects_non_finite_weights(self):
+        with self.assertRaisesRegex(ValueError, "finite"):
+            _mode({"Weight": float("nan")}, random.Random(1))
+
 if __name__ == "__main__":
     unittest.main()
