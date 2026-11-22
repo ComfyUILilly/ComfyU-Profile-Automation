@@ -104,3 +104,10 @@ ComfyU-auto-script_data/
 - 사용 기록은 프로필별 `database/usage.json`으로 분리되고, XLSX로 내보낼 수 있습니다.
 - 모델 식별자는 파일명만이 아니라 프로필·종류·상대 경로를 포함합니다.
 - 이 프로젝트는 사용자의 ComfyUI 설치 및 실제 Workflow 노드 ID에 따라 경로/노드 설정을 조정해야 합니다.
+## 호환성 및 오류 처리
+
+- `workflow_api.json`는 JSON 문자열 내부를 손상시키지 않는 범위에서 객체/배열 끝의 trailing comma를 허용합니다. 그 외 JSON 문법 오류는 파일 경로, 줄, 열을 표시합니다.
+- YAML 구문 오류 또는 YAML 최상위 구조가 잘못된 경우 해당 파일 경로와 위치를 포함해 오류를 표시합니다.
+- 기존 `dataPath/count.db`가 있으면 각 프로필의 `database/usage.json`으로 사용 기록(Checkpoint / Character / LoRA / 조합 / 태그)을 최초 실행 시 이전합니다. 원본 `count.db`는 그대로 유지합니다.
+- `queue_prompt: false`이면 ComfyUI API로 모델 목록 동기화나 큐 전송을 하지 않으며, 실제 전송이 없으므로 사용 횟수도 기록하지 않습니다.
+- `SaveImage1`와 `SaveImage2`의 파일명 prefix 끝에 각각 `-1`, `-2`가 붙고, `SaveVideo`에는 공통 prefix를 사용합니다.
