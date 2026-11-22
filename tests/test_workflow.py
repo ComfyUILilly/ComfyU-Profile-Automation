@@ -103,5 +103,19 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(engine._pick({"a": 0, "b": -1}), "")
 
 
+    def test_empty_weighted_settings_preserve_existing_inputs(self):
+        workflow = {
+            "1": {"inputs": {"sampler_name": "euler", "steps": 20}},
+        }
+        builder = WorkflowBuilder()
+        builder._apply_settings(workflow, {
+            "workflow": {"1": {"sampler_name": {"invalid": 0, "disabled": -1}}},
+        })
+        builder._apply_node_metadata(workflow, {
+            "1": {"steps": {"zero": 0, "none": -1}},
+        })
+        self.assertEqual(workflow["1"]["inputs"]["sampler_name"], "euler")
+        self.assertEqual(workflow["1"]["inputs"]["steps"], 20)
+
 if __name__ == "__main__":
     unittest.main()
