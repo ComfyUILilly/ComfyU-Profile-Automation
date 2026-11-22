@@ -116,6 +116,9 @@ def main() -> int:
     from_image = FromImageWorkflow(rng=rng)
     client = ComfyUIClient(**config["comfyui"], timeout=config["generation"].get("request_timeout", 30))
     observer = None
+    initial_profile, initial_checkpoint = _resolve_start_checkpoint(
+        config.get("safetensorsStart"), catalog, log
+    )
 
     def on_profile_change(profile_name, path, event_type):
         log.info("Profile %s file event: %s (%s); changes apply on next batch", profile_name, path, event_type)
@@ -136,7 +139,9 @@ def main() -> int:
             observer.start()
 
         while True:
-            profile_name, batch_count = manager.next_batch()
+            profile_name, batch_count = manager.next_batch(
+                initial_profile if initial_checkpoint is not None else None
+            )
             profile = catalog.load(profile_name)
             selector.database = databases[profile_name]
             log.info("Profile selected: %s (%d images)", profile_name, batch_count)
@@ -149,10 +154,15 @@ def main() -> int:
 
             profile_cfg = config["profiles"][profile_name]
             gen = config["generation"]
-            checkpoint = character = None
+            checkpoint = initial_checkpoint
+            character = None
             loras = []
-            checkpoint_remaining = character_remaining = lora_remaining = 0
-            checkpoint_mode = character_mode = lora_mode = "Weight"
+            checkpoint_remaining = _span(gen, "images_per_checkpoint", "CheckpointLoop", 1, rng) if initial_checkpoint is not None else 0
+            character_remaining = lora_remaining = 0
+            checkpoint_mode = "safetensorsStart" if initial_checkpoint is not None else "Weight"
+            character_mode = lora_mode = "Weight"
+            if initial_checkpoint is not None:
+                initial_checkpoint = None
             for index in range(batch_count):
                 imported = None
                 if checkpoint is None or checkpoint_remaining <= 0:
