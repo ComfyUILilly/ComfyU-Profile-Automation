@@ -99,9 +99,13 @@ def main() -> int:
         roots = {}
         for name, settings in config["profiles"].items():
             roots[name] = [data_path / name]
+            profile_base = Path(config.get("base_dir", PROJECT_ROOT)).expanduser().resolve()
             for key in ("checkpoint_path", "character_path", "lora_path"):
                 if settings.get(key):
-                    roots[name].append(Path(settings[key]))
+                    model_root = Path(settings[key]).expanduser()
+                    if not model_root.is_absolute():
+                        model_root = profile_base / model_root
+                    roots[name].append(model_root.resolve())
         if config.get("observer", {}).get("enabled", True):
             observer = ProfileObserver(roots, on_profile_change)
             observer.start()
