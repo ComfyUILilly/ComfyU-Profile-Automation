@@ -96,8 +96,15 @@ def load_config(path: str | Path) -> dict[str, Any]:
     for key in ("data_path", "profiles", "generation", "comfyui"):
         if key not in config:
             raise ValueError(f"Missing required config section: {key}")
-    if not config["profiles"]:
-        raise ValueError("At least one profile must be configured")
+    if not isinstance(config["profiles"], dict) or not config["profiles"]:
+        raise ValueError("profiles must be a non-empty mapping")
+    if not isinstance(config["generation"], dict):
+        raise ValueError("generation must be a mapping")
+    if not isinstance(config["comfyui"], dict):
+        raise ValueError("comfyui must be a mapping")
+    for url_key in ("prompt_url", "queue_url"):
+        if not isinstance(config["comfyui"].get(url_key), str) or not config["comfyui"][url_key].strip():
+            raise ValueError(f"comfyui.{url_key} must be a non-empty string")
 
     project_root = config_path.parent
     for key in ("data_path", "base_dir"):
