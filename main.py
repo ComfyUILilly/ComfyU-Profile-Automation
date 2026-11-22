@@ -28,13 +28,18 @@ from comfy_profile_automation.from_image import FromImageWorkflow
 
 def _count(value, rng):
     if isinstance(value, (list, tuple)) and len(value) == 2:
-        return rng.randint(int(value[0]), int(value[1]))
+        low, high = int(value[0]), int(value[1])
+        if low < 0 or high < low:
+            raise ValueError(f"Invalid count range: {value!r} (expected 0 <= min <= max)")
+        return rng.randint(low, high)
     return max(1, int(value))
 
 
 def _mode(value, rng):
     if isinstance(value, dict):
         names = list(value)
+        if not names:
+            return "Weight"
         weights = [max(0.0, float(value[name])) for name in names]
         return rng.choices(names, weights=weights if any(weights) else None, k=1)[0]
     return str(value)
