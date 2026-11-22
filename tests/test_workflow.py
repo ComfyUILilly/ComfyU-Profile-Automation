@@ -117,5 +117,19 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(workflow["1"]["inputs"]["sampler_name"], "euler")
         self.assertEqual(workflow["1"]["inputs"]["steps"], 20)
 
+    def test_saveimage_nodes_have_distinct_legacy_suffixes(self):
+        checkpoint = ModelFile("IL", "checkpoint", Path("base.safetensors"), "IL/base.safetensors")
+        profile = ProfileData(name="IL", root=Path("."), checkpoints=[checkpoint])
+        workflow = {
+            "SaveImage1": {"inputs": {}},
+            "SaveImage2": {"inputs": {}},
+            "SaveVideo": {"inputs": {}},
+        }
+        builder = WorkflowBuilder()
+        builder._set_save_prefix(workflow, profile, checkpoint, None, [])
+        prefix = workflow["SaveVideo"]["inputs"]["filename_prefix"]
+        self.assertEqual(workflow["SaveImage1"]["inputs"]["filename_prefix"], prefix + "-1")
+        self.assertEqual(workflow["SaveImage2"]["inputs"]["filename_prefix"], prefix + "-2")
+
 if __name__ == "__main__":
     unittest.main()
