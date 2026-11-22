@@ -64,5 +64,31 @@ class ConfigTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "root must be a mapping"):
                 load_config(path)
 
+    def test_invalid_profile_batch_range_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.yml"
+            path.write_text(yaml.safe_dump({
+                "data_path": "../data",
+                "profiles": {"IL": {"weight": 1, "batch_images": [4, 2]}},
+                "generation": {},
+                "comfyui": {"prompt_url": "http://127.0.0.1:8188/prompt",
+                             "queue_url": "http://127.0.0.1:8188/queue"},
+            }), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "batch_images range"):
+                load_config(path)
+
+    def test_non_finite_profile_weight_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.yml"
+            path.write_text(yaml.safe_dump({
+                "data_path": "../data",
+                "profiles": {"IL": {"weight": float("nan")}},
+                "generation": {},
+                "comfyui": {"prompt_url": "http://127.0.0.1:8188/prompt",
+                             "queue_url": "http://127.0.0.1:8188/queue"},
+            }), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "finite and non-negative"):
+                load_config(path)
+
 if __name__ == "__main__":
     unittest.main()
