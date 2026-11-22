@@ -116,10 +116,19 @@ def load_config(path: str | Path) -> dict[str, Any]:
     for name, settings in config["profiles"].items():
         if not isinstance(settings, dict):
             raise ValueError(f"Profile settings must be a mapping: {name}")
-        if float(settings.get("weight", 0)) < 0:
-            raise ValueError(f"Profile weight cannot be negative: {name}")
-        if not isinstance(settings.get("batch_images", 1), (int, list, tuple)):
-            raise ValueError(f"Invalid batch_images for profile {name}")
+        weight = float(settings.get("weight", 0))
+        if not math.isfinite(weight) or weight < 0:
+            raise ValueError(f"Profile weight must be finite and non-negative: {name}")
+        batch_images = settings.get("batch_images", 1)
+        if isinstance(batch_images, bool):
+            raise ValueError(f"Invalid batch_images for profile {name}: {batch_images!r}")
+        if isinstance(batch_images, (list, tuple)):
+            if len(batch_images) != 2 or any(isinstance(v, bool) or not isinstance(v, int) for v in batch_images):
+                raise ValueError(f"Invalid batch_images range for profile {name}: {batch_images!r}")
+            if batch_images[0] < 1 or batch_images[1] < batch_images[0]:
+                raise ValueError(f"Invalid batch_images range for profile {name}: {batch_images!r}")
+        elif not isinstance(batch_images, int) or batch_images < 1:
+            raise ValueError(f"Invalid batch_images for profile {name}: {batch_images!r}")
         for key in ("checkpoint_path", "character_path", "lora_path", "from_img_path"):
             if settings.get(key):
                 value = Path(settings[key]).expanduser()
