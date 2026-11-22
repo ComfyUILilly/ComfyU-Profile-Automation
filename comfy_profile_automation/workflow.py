@@ -111,7 +111,9 @@ class WorkflowBuilder:
         for node_id, values in workflow_settings.items():
             if node_id in workflow and isinstance(values, dict):
                 for key, value in values.items():
-                    workflow[node_id].setdefault("inputs", {})[key] = self._random_value(value)
+                    selected = self._random_value(value)
+                    if selected is not None:
+                        workflow[node_id].setdefault("inputs", {})[key] = selected
         for meta in ("workflow_scale", "workflow_min", "workflow_max"):
             for node_id, values in settings.get(meta, {}).items():
                 if node_id not in workflow or not isinstance(values, dict):
@@ -224,7 +226,9 @@ class WorkflowBuilder:
         inputs = sampler.get("inputs", {})
         for key, value in metadata.items():
             if key in inputs:
-                inputs[key] = self._random_value(value)
+                selected = self._random_value(value)
+                if selected is not None:
+                    inputs[key] = selected
 
     def _randomize_seeds(self, workflow):
         for node in workflow.values():
@@ -237,7 +241,9 @@ class WorkflowBuilder:
             if node_id in workflow and isinstance(values, dict):
                 inputs = workflow[node_id].setdefault("inputs", {})
                 for key, value in values.items():
-                    inputs[key] = self._random_value(value)
+                    selected = self._random_value(value)
+                    if selected is not None:
+                        inputs[key] = selected
 
     def _set_save_prefix(self, workflow, profile, checkpoint, character, loras):
         from datetime import datetime
@@ -312,7 +318,9 @@ class WorkflowBuilder:
         for key in ("strength_model", "strength_clip", "A", "B", "preset", "block_vector"):
             value = metadata.get(key, defaults.get(key))
             if value is not None:
-                inputs[key] = self._random_value(value)
+                selected = self._random_value(value)
+                if selected is not None:
+                    inputs[key] = selected
 
     @staticmethod
     def _apply_prompt_metadata(workflow, profile, checkpoint, character, loras):
