@@ -238,6 +238,10 @@ class ComfyUIClient:
 
     def wait_until_idle(self, poll_interval: float = 1.0,
                         max_wait: float | None = None) -> None:
+        if poll_interval <= 0:
+            raise ValueError("poll_interval must be greater than zero")
+        if max_wait is not None and max_wait < 0:
+            raise ValueError("max_wait must be non-negative or None")
         started = time.monotonic()
         while True:
             response = self.session.get(self.queue_url, timeout=self.timeout)
