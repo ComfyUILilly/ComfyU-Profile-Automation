@@ -5,6 +5,7 @@ import logging
 import random
 import time
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -38,14 +39,14 @@ def _count(value, rng):
 def _sleep_duration(value, rng):
     if isinstance(value, (list, tuple)) and len(value) == 2:
         low, high = float(value[0]), float(value[1])
-        if low < 0 or high < low:
+        if not math.isfinite(low) or not math.isfinite(high) or low < 0 or high < low:
             raise ValueError(f"Invalid sleep range: {value!r}")
         if any(isinstance(v, float) for v in value):
             return rng.uniform(low, high)
         return rng.randint(int(low), int(high))
     duration = float(value)
-    if duration < 0:
-        raise ValueError(f"Sleep duration must be non-negative: {value!r}")
+    if not math.isfinite(duration) or duration < 0:
+        raise ValueError(f"Sleep duration must be finite and non-negative: {value!r}")
     return duration
 
 
