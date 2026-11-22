@@ -174,7 +174,7 @@ class ProfileCatalog:
                 cleaned.append(char)
                 if escaped:
                     escaped = False
-                elif char == "\\\\":
+                elif char == "\\":
                     escaped = True
                 elif char == '"':
                     in_string = False
