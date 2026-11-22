@@ -127,5 +127,21 @@ class ComfyApiTests(unittest.TestCase):
         )
 
 
+    def test_wait_until_idle_rejects_invalid_poll_interval(self):
+        client = ComfyUIClient(
+            "http://127.0.0.1:8188/prompt",
+            "http://127.0.0.1:8188/queue",
+        )
+        with self.assertRaisesRegex(ValueError, "poll_interval"):
+            client.wait_until_idle(poll_interval=0)
+
+    def test_wait_until_idle_rejects_negative_timeout(self):
+        client = ComfyUIClient(
+            "http://127.0.0.1:8188/prompt",
+            "http://127.0.0.1:8188/queue",
+        )
+        with self.assertRaisesRegex(ValueError, "max_wait"):
+            client.wait_until_idle(max_wait=-1)
+
 if __name__ == "__main__":
     unittest.main()
