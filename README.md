@@ -111,3 +111,4 @@ ComfyU-auto-script_data/
 - 기존 `dataPath/count.db`가 있으면 각 프로필의 `database/usage.json`으로 사용 기록(Checkpoint / Character / LoRA / 조합 / 태그)을 최초 실행 시 이전합니다. 원본 `count.db`는 그대로 유지합니다.
 - `queue_prompt: false`이면 ComfyUI API로 모델 목록 동기화나 큐 전송을 하지 않으며, 실제 전송이 없으므로 사용 횟수도 기록하지 않습니다.
 - `SaveImage1`와 `SaveImage2`의 파일명 prefix 끝에 각각 `-1`, `-2`가 붙고, `SaveVideo`에는 공통 prefix를 사용합니다.
+- 기존 설정의 `safetensorsStart`가 유효한 `프로필/파일` 경로를 가리키면 첫 배치에서 해당 Checkpoint를 먼저 사용합니다.
