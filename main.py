@@ -233,9 +233,11 @@ def main() -> int:
                         elif isinstance(raw_tags, list):
                             tags.extend(raw_tags)
                     databases[profile_name].record(
-                        profile_name, checkpoint.relative_path,
-                character.relative_path if character else None,
-                [item.relative_path for item in loras], tags=tags,
+                        profile_name,
+                        checkpoint.relative_path,
+                        character.relative_path if character else None,
+                        [item.relative_path for item in loras],
+                        tags=tags,
                     )
                     interval = int(gen.get("xlsx_export_interval", 0))
                     if interval and (index + 1) % interval == 0:
