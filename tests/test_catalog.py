@@ -32,6 +32,31 @@ class CatalogTests(unittest.TestCase):
             self.assertEqual(catalog.load("Anime").checkpoints, [])
             self.assertEqual([x.name for x in catalog.load("IL").checkpoints], ["not_anime"])
 
+    def test_workflow_json_accepts_trailing_commas_in_objects_and_arrays(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workflow_api.json"
+            path.write_text(
+                '{"1": {"class_type": "Test", "inputs": {"text": "comma, } in string", "items": [1, 2,],},},}',
+                encoding="utf-8",
+            )
+            loaded = ProfileCatalog._load_workflow_json(path)
+            self.assertEqual(loaded["1"]["inputs"]["items"], [1, 2])
+            self.assertEqual(loaded["1"]["inputs"]["text"], "comma, } in string")
+
+    def test_invalid_workflow_json_reports_file_and_location(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workflow_api.json"
+            path.write_text('{"1": {"inputs": [1, 2, }', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, str(path)):
+                ProfileCatalog._load_workflow_json(path)
+
+    def test_workflow_json_must_be_object(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workflow_api.json"
+            path.write_text('[1, 2, 3]', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "must be an object"):
+                ProfileCatalog._load_workflow_json(path)
+
     def test_profile_isolation(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
