@@ -218,7 +218,7 @@ def main() -> int:
                 )
                 if gen.get("queue_prompt", True):
                     client.queue_prompt(workflow)
-                if gen.get("queue_prompt_wait", gen.get("wait_for_queue", True)):
+                if gen.get("queue_prompt", True) and gen.get("queue_prompt_wait", gen.get("wait_for_queue", True)):
                     client.wait_until_idle(poll_interval=gen.get("poll_interval", 1),
                                            max_wait=gen.get("max_queue_wait"))
                 used_assets = [*([character] if character else []), *loras]
