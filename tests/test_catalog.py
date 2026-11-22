@@ -57,6 +57,20 @@ class CatalogTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "must be an object"):
                 ProfileCatalog._load_workflow_json(path)
 
+    def test_yaml_errors_include_source_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "broken.yml"
+            path.write_text("key: [unterminated", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, str(path)):
+                ProfileCatalog._yaml(path)
+
+    def test_yaml_root_must_be_mapping(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "list.yml"
+            path.write_text("- one\n- two\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "root must be a mapping"):
+                ProfileCatalog._yaml(path)
+
     def test_profile_isolation(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
