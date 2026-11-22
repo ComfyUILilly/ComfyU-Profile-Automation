@@ -181,5 +181,19 @@ class WorkflowTests(unittest.TestCase):
         builder._apply_settings(workflow, {"workflow": {"1": {"steps": 40}}})
         self.assertEqual(workflow["1"]["inputs"]["steps"], 20)
 
+    def test_prompt_metadata_preserves_template_info(self):
+        checkpoint = ModelFile("IL", "checkpoint", Path("base.safetensors"), "IL/base.safetensors")
+        profile = ProfileData(
+            name="IL", root=Path("."), checkpoints=[checkpoint],
+            workflow_api={
+                "CheckpointLoaderSimple": {"inputs": {"ckpt_name": "old"}},
+                "PrimitiveStringMultilineInfo": {"inputs": {"value": "Template note"}},
+            },
+        )
+        result = WorkflowBuilder().build(profile, checkpoint, None, [])
+        info = result["PrimitiveStringMultilineInfo"]["inputs"]["value"]
+        self.assertIn("Template note", info)
+        self.assertIn("Checkpoint: IL/base.safetensors", info)
+
 if __name__ == "__main__":
     unittest.main()
