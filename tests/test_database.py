@@ -44,5 +44,22 @@ class UsageDatabaseTests(unittest.TestCase):
             reopened.close()
 
 
+    def test_xlsx_export_creates_separate_sheets_and_tables(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = UsageDatabase(Path(tmp) / "IL" / "database")
+            db.record("IL", "base.safetensors", "hero.safetensors", ["style.safetensors"])
+            db.record("IL", "base.safetensors", "hero.safetensors", ["style.safetensors"])
+            output = db.export_xlsx()
+            self.assertTrue(output.exists())
+            from openpyxl import load_workbook
+            workbook = load_workbook(output)
+            self.assertIn("IL__checkpoint", workbook.sheetnames)
+            sheet = workbook["IL__checkpoint"]
+            self.assertEqual(sheet.cell(1, 1).value, "asset")
+            self.assertEqual(sheet.cell(2, 2).value, 2)
+            self.assertEqual(len(sheet.tables), 1)
+            workbook.close()
+            db.close()
+
 if __name__ == "__main__":
     unittest.main()
