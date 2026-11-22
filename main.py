@@ -55,7 +55,12 @@ def _mode(value, rng):
         names = list(value)
         if not names:
             return "Weight"
-        weights = [max(0.0, float(value[name])) for name in names]
+        weights = []
+        for name in names:
+            weight = float(value[name])
+            if not math.isfinite(weight):
+                raise ValueError(f"Mode weight must be finite: {name}={weight}")
+            weights.append(max(0.0, weight))
         return rng.choices(names, weights=weights if any(weights) else None, k=1)[0]
     return str(value)
 
