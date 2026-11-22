@@ -65,6 +65,31 @@ def _lora_selection_count(generation, mode, rng):
     return _count(value, rng)
 
 
+def _resolve_start_checkpoint(start_value, catalog, log=None):
+    """Resolve legacy safetensorsStart to one unambiguous active-profile asset."""
+    if not isinstance(start_value, str) or not start_value.strip():
+        return None, None
+    parts = [part for part in start_value.strip().replace("\\\\", "/").split("/") if part]
+    if len(parts) < 2:
+        if log:
+            log.warning("Ignoring safetensorsStart without profile/file path: %s", start_value)
+        return None, None
+    profile_name = parts[0]
+    if profile_name not in catalog.profile_names:
+        if log:
+            log.warning("Ignoring safetensorsStart with unknown profile: %s", profile_name)
+        return None, None
+    stem = Path(parts[-1]).stem
+    profile = catalog.load(profile_name)
+    matches = [item for item in profile.checkpoints if item.name == stem]
+    if len(matches) != 1:
+        if log:
+            log.warning("Ignoring safetensorsStart: checkpoint '%s' is missing or ambiguous in %s",
+                        stem, profile_name)
+        return None, None
+    return profile_name, matches[0]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="ComfyUI profile automation")
     parser.add_argument("--config", default=str(PROJECT_ROOT / "config.yml"))
