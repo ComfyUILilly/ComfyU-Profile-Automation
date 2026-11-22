@@ -83,5 +83,18 @@ class CatalogTests(unittest.TestCase):
             self.assertEqual([x.name for x in catalog.load("Anime").checkpoints], ["Anime"])
 
 
+    def test_asset_metadata_zero_weight_overrides_configured_weight(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            model = __import__("comfy_profile_automation.catalog", fromlist=["ModelFile"]).ModelFile(
+                "IL", "checkpoint", root / "base.safetensors", "IL/base.safetensors"
+            )
+            weights = ProfileCatalog(root, {"IL": {}})._effective_asset_weights(
+                "checkpoint", [model], {"IL/base.safetensors": {"weight": 0}},
+                {"IL/base.safetensors": 9},
+            )
+            self.assertEqual(weights[model.identity], 0)
+            self.assertEqual(weights[model.relative_path], 0)
+
 if __name__ == "__main__":
     unittest.main()
