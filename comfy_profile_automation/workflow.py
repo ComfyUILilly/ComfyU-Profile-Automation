@@ -285,10 +285,10 @@ class WorkflowBuilder:
             f"{checkpoint_label}-{character_label}-{style_dress}-{len(loras)}-"
             f"{timestamp}-{self._generation_counter}"
         )
-        for node_id in ("SaveImage1", "SaveImage2", "SaveVideo"):
+        for node_id, suffix in (("SaveImage1", "-1"), ("SaveImage2", "-2"), ("SaveVideo", "")):
             node = workflow.get(node_id)
             if isinstance(node, dict):
-                node.setdefault("inputs", {})["filename_prefix"] = prefix
+                node.setdefault("inputs", {})["filename_prefix"] = prefix + suffix
         if self.settings.get("noSaveImage1", profile.setup_workflow.get("noSaveImage1", False)):
             workflow.pop("SaveImage1", None)
 
