@@ -13,12 +13,17 @@ class ProfileManager:
         self.profiles = profiles
         self.rng = rng or random.Random()
 
-    def next_batch(self) -> tuple[str, int]:
+    def next_batch(self, profile_override: str | None = None) -> tuple[str, int]:
         names = list(self.profiles)
         weights = [float(self.profiles[name].get("weight", 1)) for name in names]
         if any(weight < 0 for weight in weights) or not any(weight > 0 for weight in weights):
             raise ValueError("Profile weights must be non-negative and at least one must be positive")
-        name = self.rng.choices(names, weights=weights, k=1)[0]
+        if profile_override is not None:
+            if profile_override not in self.profiles:
+                raise KeyError(f"Unknown profile override: {profile_override}")
+            name = profile_override
+        else:
+            name = self.rng.choices(names, weights=weights, k=1)[0]
         setting = self.profiles[name].get("batch_images", 1)
         if isinstance(setting, int):
             count = setting
