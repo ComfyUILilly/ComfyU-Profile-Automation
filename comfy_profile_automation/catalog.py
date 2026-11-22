@@ -153,6 +153,59 @@ class ProfileCatalog:
                 weights.setdefault(item.name, value)
         return weights
 
+    @staticmethod
+    def _load_workflow_json(path: Path) -> dict[str, Any]:
+        """Load API workflow JSON, tolerating legacy trailing commas.
+
+        Only commas outside quoted strings that are followed (ignoring whitespace)
+        by a closing object/array delimiter are removed. Other JSON syntax errors
+        are surfaced with the source path for easier troubleshooting.
+        """
+        if not path.exists():
+            return {}
+        text = path.read_text(encoding="utf-8-sig")
+        cleaned = []
+        in_string = False
+        escaped = False
+        index = 0
+        while index < len(text):
+            char = text[index]
+            if in_string:
+                cleaned.append(char)
+                if escaped:
+                    escaped = False
+                elif char == "\\\\":
+                    escaped = True
+                elif char == '"':
+                    in_string = False
+                index += 1
+                continue
+            if char == '"':
+                in_string = True
+                cleaned.append(char)
+                index += 1
+                continue
+            if char == ",":
+                lookahead = index + 1
+                while lookahead < len(text) and text[lookahead].isspace():
+                    lookahead += 1
+                if lookahead < len(text) and text[lookahead] in "}]":
+                    index += 1
+                    continue
+            cleaned.append(char)
+            index += 1
+
+        try:
+            workflow = json.loads("".join(cleaned))
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"Invalid workflow JSON in {path}: {exc.msg} "
+                f"(line {exc.lineno}, column {exc.colno})"
+            ) from exc
+        if not isinstance(workflow, dict):
+            raise ValueError(f"Workflow JSON must be an object: {path}")
+        return workflow
+
     def load(self, profile: str) -> ProfileData:
         if profile not in self.profile_names:
             raise KeyError(f"Unknown profile: {profile}")
@@ -162,10 +215,7 @@ class ProfileCatalog:
         characters = self._scan(profile, "character", "lora/char")
         loras = self._scan(profile, "lora", "lora/etc")
         workflow_path = root / settings.get("workflow_file", "workflow_api.json")
-        workflow = {}
-        if workflow_path.exists():
-            with workflow_path.open("r", encoding="utf-8-sig") as stream:
-                workflow = json.load(stream)
+        workflow = self._load_workflow_json(workflow_path)
         raw_weights = {
             "checkpoint": self._yaml(root / "WeightCheckpoint.yml"),
             "character": self._yaml(root / "WeightChar.yml"),
