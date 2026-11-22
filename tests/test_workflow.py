@@ -159,5 +159,21 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(workflow["LoraLoader"]["inputs"]["strength_model"], 0.0)
         self.assertEqual(workflow["LoraLoader"]["inputs"]["strength_clip"], 0.0)
 
+    def test_lora_wildcard_prompt_is_only_added_in_wildcard_mode(self):
+        checkpoint = ModelFile("IL", "checkpoint", Path("base.safetensors"), "IL/base.safetensors")
+        profile = ProfileData(
+            name="IL", root=Path("."), checkpoints=[checkpoint],
+            setup_wildcard={"LoraWildcard": {"positive": {"lora": "wildcard-token"}}},
+            workflow_api={
+                "CheckpointLoaderSimple": {"inputs": {"ckpt_name": "old"}},
+                "PrimitiveStringMultilineP": {"inputs": {"value": ""}},
+                "PrimitiveStringMultilineN": {"inputs": {"value": ""}},
+            },
+        )
+        normal = WorkflowBuilder().build(profile, checkpoint, None, [], lora_kind="Weight")
+        self.assertNotIn("wildcard-token", normal["PrimitiveStringMultilineP"]["inputs"]["value"])
+        wildcard = WorkflowBuilder().build(profile, checkpoint, None, [], lora_kind="Wildcard")
+        self.assertIn("wildcard-token", wildcard["PrimitiveStringMultilineP"]["inputs"]["value"])
+
 if __name__ == "__main__":
     unittest.main()
