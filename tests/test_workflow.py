@@ -131,5 +131,33 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(workflow["SaveImage1"]["inputs"]["filename_prefix"], prefix + "-1")
         self.assertEqual(workflow["SaveImage2"]["inputs"]["filename_prefix"], prefix + "-2")
 
+    def test_wildcard_character_mode_loads_a_valid_disabled_lora(self):
+        checkpoint = ModelFile("IL", "checkpoint", Path("base.safetensors"), "IL/base.safetensors")
+        chars = [
+            ModelFile("IL", "character", Path("hero1.safetensors"), "IL/char/hero1.safetensors"),
+            ModelFile("IL", "character", Path("hero2.safetensors"), "IL/char/hero2.safetensors"),
+        ]
+        profile = ProfileData(
+            name="IL",
+            root=Path("."),
+            checkpoints=[checkpoint],
+            characters=chars,
+            workflow_api={
+                "CheckpointLoaderSimple": {"inputs": {"ckpt_name": "old"}},
+                "LoraLoader": {"class_type": "LoraLoader", "inputs": {
+                    "lora_name": "stale.safetensors", "strength_model": 1.0,
+                    "strength_clip": 1.0, "model": ["CheckpointLoaderSimple", 0],
+                    "clip": ["CheckpointLoaderSimple", 1,
+                }},
+            },
+        )
+        workflow = WorkflowBuilder(rng=__import__("random").Random(1)).build(
+            profile, checkpoint, None, []
+        )
+        self.assertIn(workflow["LoraLoader"]["inputs"]["lora_name"],
+                      {item.relative_path for item in chars})
+        self.assertEqual(workflow["LoraLoader"]["inputs"]["strength_model"], 0.0)
+        self.assertEqual(workflow["LoraLoader"]["inputs"]["strength_clip"], 0.0)
+
 if __name__ == "__main__":
     unittest.main()
