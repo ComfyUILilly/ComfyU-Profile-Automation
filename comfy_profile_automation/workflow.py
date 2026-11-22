@@ -20,7 +20,8 @@ class WorkflowBuilder:
         self._generation_counter = 0
 
     def build(self, profile: ProfileData, checkpoint: ModelFile,
-              character: ModelFile | None, loras: list[ModelFile], weight_metadata: list[dict] | None = None) -> dict[str, Any]:
+              character: ModelFile | None, loras: list[ModelFile],
+              weight_metadata: list[dict] | None = None, lora_kind: str = "Weight") -> dict[str, Any]:
         assets = [checkpoint, *([character] if character else []), *loras]
         if any(item.profile != profile.name for item in assets):
             raise ValueError("Cross-profile assets are not allowed")
@@ -43,7 +44,7 @@ class WorkflowBuilder:
         self._randomize_seeds(workflow)
         character_metadata = self._metadata(profile, character) if character else profile.setup_wildcard.get("CharWildcard", {})
         lora_metadata = [self._metadata(profile, item) for item in loras]
-        if not lora_metadata:
+        if not lora_metadata and lora_kind == "Wildcard":
             lora_metadata = [profile.setup_wildcard.get("LoraWildcard", {})]
         source_groups = {
             "setup": [profile.setup_wildcard] if checkpoint_metadata.get("Setup", True) else [],
