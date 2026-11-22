@@ -74,6 +74,24 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(len(selected), 1)
         self.assertIn(selected[0].name, {"a", "b"})
 
+    def test_db_lora_selection_draws_with_replacement_then_deduplicates(self):
+        class RepeatFirst(random.Random):
+            def choices(self, population, weights=None, *, cum_weights=None, k=1):
+                return [population[0]] * k
+
+        class FakeDatabase:
+            def counts(self, profile, category):
+                return {}
+
+        loras = [
+            ModelFile("IL", "lora", Path("a.safetensors"), "IL/etc/a.safetensors"),
+            ModelFile("IL", "lora", Path("b.safetensors"), "IL/etc/b.safetensors"),
+        ]
+        profile = ProfileData(name="IL", root=Path("."), loras=loras)
+        selector = AssetSelector(rng=RepeatFirst(2), database=FakeDatabase())
+        selected = selector.choose(profile, "lora", "DB", count=2)
+        self.assertEqual(selected, [loras[0]])
+
     def test_group_lora_mapping_selects_one_weighted_name(self):
         selector = AssetSelector(rng=random.Random(7))
         chosen = selector._pick_group_lora({"a": 0, "b": 1})
