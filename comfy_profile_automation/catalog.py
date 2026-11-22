@@ -151,7 +151,7 @@ class ProfileCatalog:
                 same_stem = [candidate for candidate in models if candidate.name == item.name]
                 meta = metadata.get(item.name, {}) if len(same_stem) == 1 else {}
             meta_weight = meta.get("weight") if isinstance(meta, dict) else None
-            value = meta_weight or weights.get(
+            value = meta_weight if meta_weight is not None else weights.get(
                 item.identity,
                 weights.get(item.relative_path, weights.get(item.name, default)),
             )
