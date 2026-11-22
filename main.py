@@ -35,6 +35,20 @@ def _count(value, rng):
     return max(1, int(value))
 
 
+def _sleep_duration(value, rng):
+    if isinstance(value, (list, tuple)) and len(value) == 2:
+        low, high = float(value[0]), float(value[1])
+        if low < 0 or high < low:
+            raise ValueError(f"Invalid sleep range: {value!r}")
+        if any(isinstance(v, float) for v in value):
+            return rng.uniform(low, high)
+        return rng.randint(int(low), int(high))
+    duration = float(value)
+    if duration < 0:
+        raise ValueError(f"Sleep duration must be non-negative: {value!r}")
+    return duration
+
+
 def _mode(value, rng):
     if isinstance(value, dict):
         names = list(value)
@@ -301,7 +315,7 @@ def main() -> int:
                     interval = int(gen.get("xlsx_export_interval", 0))
                     if interval and (index + 1) % interval == 0:
                         databases[profile_name].export_xlsx()
-                time.sleep(float(gen.get("sleep_seconds", 0)))
+                time.sleep(_sleep_duration(gen.get("sleep_seconds", 0), rng))
             if args.dry_run:
                 return 0
     except KeyboardInterrupt:
