@@ -31,7 +31,7 @@ class MainHelperTests(unittest.TestCase):
                 "IL": {"checkpoint_path": str(models)},
             }, base_dir=root)
             profile_name, checkpoint = __import__("main")._resolve_start_checkpoint(
-                r"IL\\checkpoint\\base.safetensors", catalog
+                r"IL\checkpoint\base.safetensors", catalog
             )
             self.assertEqual(profile_name, "IL")
             self.assertEqual(checkpoint.name, "base")
