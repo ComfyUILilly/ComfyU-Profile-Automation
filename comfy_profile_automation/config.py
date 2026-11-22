@@ -50,8 +50,15 @@ def load_config(path: str | Path) -> dict[str, Any]:
     config_path = Path(path).expanduser().resolve()
     if not config_path.exists():
         raise FileNotFoundError(f"Config not found: {config_path}. Copy config.example.yml to config.yml first.")
-    with config_path.open("r", encoding="utf-8-sig") as stream:
-        config = yaml.load(stream, Loader=LegacySafeLoader) or {}
+    try:
+        with config_path.open("r", encoding="utf-8-sig") as stream:
+            config = yaml.load(stream, Loader=LegacySafeLoader) or {}
+    except yaml.YAMLError as exc:
+        mark = getattr(exc, "problem_mark", None)
+        location = f" (line {mark.line + 1}, column {mark.column + 1})" if mark else ""
+        raise ValueError(f"Invalid configuration YAML in {config_path}{location}: {exc}") from exc
+    if not isinstance(config, dict):
+        raise ValueError(f"Configuration root must be a mapping: {config_path}")
 
     if "data_path" not in config and "dataPath" in config:
         config["data_path"] = config["dataPath"]
