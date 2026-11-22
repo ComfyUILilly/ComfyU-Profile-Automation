@@ -343,4 +343,8 @@ class WorkflowBuilder:
             if character:
                 lines.append(f"Character: {character.relative_path}")
             lines.extend(f"LoRA: {item.relative_path}" for item in loras)
-            info.setdefault("inputs", {})["value"] = "\n".join(lines) + "\n"
+            inputs = info.setdefault("inputs", {})
+            original = inputs.get("value", "")
+            if isinstance(original, str) and original.strip():
+                lines.insert(0, original.rstrip())
+            inputs["value"] = "\n".join(lines) + "\n"
